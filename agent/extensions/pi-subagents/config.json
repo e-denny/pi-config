@@ -1,0 +1,16 @@
+{
+  "comment": "Global defaults for pi-subagents. Copy keys you want to change. Project overrides live in <cwd>/.pi/subagents.json and win on conflicts.",
+  "defaultModel": "deepseek-v4-flash",
+  "defaultThinking": "low",
+  "defaultContext": "fresh",
+  "asyncByDefault": true,
+  "timeoutMs": 1800000,
+  "maxActiveAsyncRunsPerSession": 4,
+  "maxSubagentDepth": 1,
+  "artifactDir": "session",
+  "taskDelivery": "auto",
+  "stopAsyncOnShutdown": true,
+  "retainTerminalMs": 21600000,
+  "parallel": { "maxTasks": 8, "concurrency": 4 },
+  "herdrCommand": "herdr"
+}

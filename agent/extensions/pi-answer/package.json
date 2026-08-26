@@ -1,0 +1,14 @@
+{
+  "name": "pi-answer",
+  "version": "0.1.0",
+  "description": "Split an LLM's batch of questions into single questions, answer them one at a time, and consolidate the answers into one reply sent back to the LLM.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi", "pi-extension", "questions", "qna", "batch-questions"],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

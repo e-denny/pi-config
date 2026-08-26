@@ -9,6 +9,10 @@ agent/trust.json
 agent/sessions/
 agent/npm/
 web-search-cache/
+agent/extensions/herdr-agent-state.ts
 
-# Extensions have their own repos (pi-prompt-box, pi-answer, pi-subagents)
-agent/extensions/
+# Extension dependencies
+agent/extensions/**/node_modules/
+
+# pi-prompt-box keeps its own repo
+agent/extensions/pi-prompt-box/
