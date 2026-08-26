@@ -1,0 +1,14 @@
+# Secrets — never commit
+agent/auth.json
+agent/models-store.json
+
+# Machine-specific
+agent/trust.json
+
+# Transient / generated
+agent/sessions/
+agent/npm/
+web-search-cache/
+
+# Extensions have their own repos (pi-prompt-box, pi-answer, pi-subagents)
+agent/extensions/
