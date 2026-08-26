@@ -14,5 +14,3 @@ agent/extensions/herdr-agent-state.ts
 # Extension dependencies
 agent/extensions/**/node_modules/
 
-# pi-prompt-box keeps its own repo
-agent/extensions/pi-prompt-box/

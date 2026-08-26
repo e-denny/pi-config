@@ -1,0 +1,11 @@
+{
+  "name": "pi-prompt-box",
+  "version": "1.1.0",
+  "description": "Draws the pi prompt input as a rounded-corner box and folds the footer (cwd, git branch, model, token usage, context) into the box's bottom line.",
+  "keywords": ["pi", "pi-coding-agent", "extension", "tui", "prompt"],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/e-denny/pi-prompt-box.git"
+  }
+}
