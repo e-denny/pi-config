@@ -1,7 +1,7 @@
 {
   "name": "pi-speech-to-text",
   "version": "0.1.0",
-  "description": "Toggle mic speech-to-text in pi's prompt: Alt+M to dictate, local faster-whisper transcribes on your own machine and streams the transcript into the input as you speak.",
+  "description": "Hold Alt+M to dictate into pi's prompt: local faster-whisper transcribes 5s audio windows in parallel across CPUs and streams the transcript into the input as you speak.",
   "type": "module",
   "keywords": ["pi-package", "speech-to-text", "stt", "mic", "whisper", "faster-whisper", "local"],
   "license": "MIT",
