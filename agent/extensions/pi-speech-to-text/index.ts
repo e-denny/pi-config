@@ -246,6 +246,11 @@ export default function (pi: ExtensionAPI) {
         updateWidget(ctx);
         scheduleEditorUpdate(ctx, true);
         break;
+      case "status":
+        // worker is retrying a transient Mistral backend error
+        status = "connecting";
+        updateWidget(ctx);
+        break;
       case "error":
         ctx.ui.notify(`pi-speech-to-text: ${msg.message ?? "unknown error"}`, "error");
         break;

@@ -69,6 +69,9 @@ let lastFlushAt = 0;
 let micStderr = "";
 let wsStderr = "";
 let finalTimer = null;
+let retries = 0;
+let retryTimer = null;
+const MAX_RETRIES = 3;
 
 // ---------------------------------------------------------------------------
 // stdout protocol
@@ -147,6 +150,7 @@ async function startMic() {
 
   const pick = pickMicCommand();
   if (!pick) return false;
+  if (mic) return true; // reuse the running mic across session retries
 
   return new Promise((resolve) => {
     mic = spawn(pick.cmd, pick.args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -214,10 +218,42 @@ function computeRms(buf) {
 // ---------------------------------------------------------------------------
 // Mistral realtime WebSocket
 // ---------------------------------------------------------------------------
+// Transient server errors (vLLM TooManyRequestsError, streaming timeouts,
+// premature closes) bubble up from Mistral's realtime backend as error events
+// or early closes. Retry the session with backoff instead of dying — the
+// backend is occasionally capacity-limited.
+function isTransient(msg) {
+  const s = String(msg ?? "").toLowerCase();
+  // vLLM error class names arrive camelCased with no spaces
+  // (e.g. "TooManyRequestsError", "EngineBusyError", "RateLimitError")
+  return /too many requests|toomanyrequests|429|timeout|overloaded|rate\s*limit|ratelimit|capacity|unavailable|temporarily|busy/i.test(s);
+}
+
+function restartSession(reason) {
+  if (ending || retries >= MAX_RETRIES || retryTimer) return false;
+  retries++;
+  const delay = 2000 * retries; // 2s, 4s, 8s backoff
+  wsReady = false;
+  if (mic && mic.kind === "file") mic.kill(); // stop replay of a test file
+  if (retryTimer) clearTimeout(retryTimer);
+  send({ type: "status", message: `Mistral busy (${reason}) — retrying in ${(delay / 1000).toFixed(0)}s (${retries}/${MAX_RETRIES})` });
+  retryTimer = setTimeout(() => {
+    retryTimer = null;
+    if (ending) return;
+    try {
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, "retry");
+    } catch {}
+    ws = null;
+    openSocket();
+  }, delay);
+  return true;
+}
+
 function openSocket() {
   ws = new WebSocket(WS_URL, {
     headers: { Authorization: `Bearer ${API_KEY}` },
   });
+  const thisWs = ws; // distinguish this socket from any retry socket
 
   ws.addEventListener("open", () => {
     // No audio until we know the session's negotiated format.
@@ -228,6 +264,7 @@ function openSocket() {
     if (data instanceof ArrayBuffer) data = new TextDecoder().decode(data);
     else if (data && typeof data === "object" && typeof data.text === "function") data = data.text();
     if (typeof data !== "string") return;
+    if (thisWs !== ws) return; // stale socket from a superseded session
 
     let msg;
     try {
@@ -276,7 +313,12 @@ function openSocket() {
         break;
       case "error": {
         const detail = msg.error?.message ?? msg.error ?? "unknown error";
-        send({ type: "error", message: `Mistral: ${typeof detail === "string" ? detail : JSON.stringify(detail)}` });
+        const detailStr = typeof detail === "string" ? detail : JSON.stringify(detail);
+        if (isTransient(detailStr)) {
+          if (restartSession(detailStr)) break; // retry scheduled
+          if (retryTimer) break; // already retrying — ignore duplicate trigger
+        }
+        send({ type: "error", message: `Mistral: ${detailStr}` });
         cleanup(1);
         break;
       }
@@ -286,8 +328,14 @@ function openSocket() {
   });
 
   ws.addEventListener("close", (ev) => {
+    if (thisWs !== ws) return; // stale socket from a superseded session
     if (!doneReceived && !ending) {
-      send({ type: "error", message: `Mistral WebSocket closed unexpectedly (${ev.code}${ev.reason ? `: ${ev.reason}` : ""})` });
+      const reason = `Mistral WebSocket closed unexpectedly (${ev.code}${ev.reason ? `: ${ev.reason}` : ""})`;
+      // Capacity errors often surface as an early close before the session is
+      // ready (or as an error event matching isTransient) — retry those.
+      if (restartSession(reason)) return; // retry scheduled
+      if (retryTimer) return; // retry already pending — ignore close of the old socket
+      send({ type: "error", message: reason });
     }
     cleanup(doneReceived ? 0 : 1);
   });
@@ -303,6 +351,10 @@ function openSocket() {
 function stopListening() {
   if (ending) return;
   ending = true;
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
   if (mic && typeof mic.kill === "function") mic.kill("SIGTERM");
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: "input_audio.end" }));
@@ -315,6 +367,10 @@ function stopListening() {
 
 function cleanup(code) {
   if (finalTimer) clearTimeout(finalTimer);
+  if (retryTimer) {
+    clearTimeout(retryTimer);
+    retryTimer = null;
+  }
   if (mic && typeof mic.kill === "function") mic.kill("SIGTERM");
   try {
     if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, "done");
