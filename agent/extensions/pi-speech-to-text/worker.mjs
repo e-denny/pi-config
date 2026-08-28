@@ -2,76 +2,83 @@
 /**
  * pi-speech-to-text worker
  *
- * Captures microphone audio, streams it to Mistral realtime speech-to-text
- * over WebSocket, and prints JSON lines to stdout for the pi extension.
+ * Captures microphone audio and transcribes it with a LOCAL faster-whisper
+ * model (via stt_worker.py). Prints JSON lines to stdout for the pi extension.
  *
  * stdout protocol (one JSON object per line):
- *   {"type":"ready","model":...,"sampleRate":...}        session established
- *   {"type":"delta","text":"..."}                        partial (live) text
+ *   {"type":"ready","model":...,"sampleRate":...}        model loaded, listening
+ *   {"type":"delta","text":"..."}                        partial (unused locally)
  *   {"type":"segment","text":"..."}                      finalized segment text
  *   {"type":"done","text":"...","language":...}          final transcript
+ *   {"type":"status","message":"..."}                    informational state
  *   {"type":"error","message":"..."}                     fatal error
  *   {"type":"exited","code":...}                         worker is done
  *
- * Control via stdin: a line "stop" triggers a graceful end (sends
- * input_audio.end, waits for transcription.done, then exits). EOF on stdin
+ * Control via stdin: a line "stop" triggers a graceful end (flushes the
+ * remaining audio, waits for transcription.done, then exits). EOF on stdin
  * has the same effect.
  *
- * Audio is sent in small `input_audio.append` chunks (each well under
- * Mistral's 262144-byte per-message cap) and flushed in micro-batches:
- *   - every PI_STT_FLUSH_MS (default 15000 = 15s of speech) an
- *     `input_audio.flush` forces the server to finalize that window, and
- *   - when PI_STT_SILENCE_MS of low-level audio passes, a flush is sent so
- *     the text for what you just said lands promptly.
+ * Audio is buffered locally and transcribed in windows:
+ *   - every PI_STT_FLUSH_MS (default 15000 = 15s of speech) the buffered
+ *     window is sent to faster-whisper, and
+ *   - when PI_STT_SILENCE_MS of low-level audio passes, the window is
+ *     flushed early so the text for what you just said lands promptly.
  *
- * `target_streaming_delay_ms` (PI_STT_DELAY_MS, default 800) controls how
- * eagerly partial deltas are emitted: low latency = text appears as you
- * speak, higher latency = more accurate but arrives after you finish.
+ * faster-whisper is a batch model: results arrive per window (no word-level
+ * partials), so keep flush windows short for a responsive dictation feel.
  */
+import { existsSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
 import { platform } from "node:os";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
+const HERE = dirname(fileURLToPath(import.meta.url));
 const SAMPLE_RATE = 16000;
 const BYTES_PER_SAMPLE = 2; // pcm_s16le
 const BYTES_PER_SEC = SAMPLE_RATE * BYTES_PER_SAMPLE;
-const MAX_APPEND_BYTES = 262144; // Mistral per-message cap (decoded)
 const SILENCE_RMS_THRESHOLD = 350; // ~1% of full scale, mic noise tolerant
 
 const args = parseArgs();
-const API_KEY = args.apiKey || process.env.MISTRAL_API_KEY;
-const MODEL =
-  args.model || process.env.PI_STT_MODEL || "voxtral-mini-transcribe-realtime-2602";
-const BASE_URL =
-  args.baseUrl || process.env.PI_STT_BASE_URL || "wss://api.mistral.ai";
-const DELAY_MS = intArg("delayMs", "PI_STT_DELAY_MS", 800);
+const MODEL = args.model || process.env.PI_STT_MODEL || "small";
+const DEVICE = args.device || process.env.PI_STT_DEVICE || "cpu";
+const COMPUTE = args.compute || process.env.PI_STT_COMPUTE || "int8";
 const FLUSH_MS = intArg("flushMs", "PI_STT_FLUSH_MS", 15000);
 const SILENCE_MS = intArg("silenceMs", "PI_STT_SILENCE_MS", 1500);
-const DEVICE = args.device || process.env.PI_STT_DEVICE || "";
+const DEVICE_OVERRIDE = args.deviceOverride || process.env.PI_STT_DEVICE || "";
 const AUDIO_FILE = args.audioFile || ""; // test mode: stream a raw PCM file instead of the mic
 const AUDIO_PACE_MS = intArg("audioPaceMs", "PI_STT_AUDIO_PACE_MS", 100);
 
-if (!API_KEY) {
-  send({ type: "error", message: "MISTRAL_API_KEY is not set" });
-  process.exit(1);
+// Locate a python that has faster-whisper: prefer the extension's venv.
+function pickPython() {
+  const explicit = args.python || process.env.PI_STT_PYTHON;
+  if (explicit) return explicit;
+  const venvPy =
+    platform() === "win32"
+      ? join(HERE, ".venv", "Scripts", "python.exe")
+      : join(HERE, ".venv", "bin", "python");
+  if (existsSync(venvPy)) return venvPy;
+  // Fall back to a system python; stt_worker.py reports a clear error if
+  // faster-whisper isn't installed there.
+  return "python3";
 }
 
-const WS_URL = `${BASE_URL.replace(/^http/, "ws")}/v1/audio/transcriptions/realtime?model=${encodeURIComponent(MODEL)}`;
+const PYTHON = pickPython();
+const WORKER_PY = join(HERE, "stt_worker.py");
 
-let ws = null;
+let py = null; // faster-whisper subprocess
 let mic = null;
-let wsReady = false;
+let pyReady = false;
 let ending = false;
 let doneReceived = false;
-let audioWindowBytes = 0; // bytes since last flush (micro-batch window)
+let audioBuffer = Buffer.alloc(0); // pending window not yet transcribed
+let windowBytes = 0; // bytes accumulated since last flush
 let lastAudioAt = 0;
 let silentSince = null;
 let lastFlushAt = 0;
 let micStderr = "";
-let wsStderr = "";
+let pyStderr = "";
 let finalTimer = null;
-let retries = 0;
-let retryTimer = null;
-const MAX_RETRIES = 3;
 
 // ---------------------------------------------------------------------------
 // stdout protocol
@@ -94,7 +101,7 @@ function have(bin) {
 
 function pickMicCommand() {
   const ffmpegDevice =
-    DEVICE ||
+    DEVICE_OVERRIDE ||
     (platform() === "linux" ? "default"
       : platform() === "darwin" ? ":0"
       : "audio=Microphone");
@@ -112,15 +119,15 @@ function pickMicCommand() {
     });
   }
   if (platform() === "linux" && have("arecord")) {
-    const args = ["-q", "-f", "S16_LE", "-r", String(SAMPLE_RATE), "-c", "1", "-t", "raw"];
-    if (DEVICE) args.push("-D", DEVICE);
-    candidates.push({ name: "arecord", cmd: "arecord", args });
+    const rargs = ["-q", "-f", "S16_LE", "-r", String(SAMPLE_RATE), "-c", "1", "-t", "raw"];
+    if (DEVICE_OVERRIDE) rargs.push("-D", DEVICE_OVERRIDE);
+    candidates.push({ name: "arecord", cmd: "arecord", args: rargs });
   }
   if (have("sox")) {
     candidates.push({
       name: "sox",
       cmd: "sox",
-      args: ["-t", platform() === "linux" ? "alsa" : "coreaudio", DEVICE || "default", "-t", "raw", "-r", String(SAMPLE_RATE), "-c", "1", "-e", "signed", "-b", "16", "-"],
+      args: ["-t", platform() === "linux" ? "alsa" : "coreaudio", DEVICE_OVERRIDE || "default", "-t", "raw", "-r", String(SAMPLE_RATE), "-c", "1", "-e", "signed", "-b", "16", "-"],
     });
   }
   return candidates[0] ?? null;
@@ -129,7 +136,6 @@ function pickMicCommand() {
 async function startMic() {
   if (AUDIO_FILE) {
     // Test mode: replay a raw s16le PCM file as if it were the mic.
-    const { createReadStream } = await import("node:fs");
     const { readFileSync } = await import("node:fs");
     const data = readFileSync(AUDIO_FILE);
     let offset = 0;
@@ -150,7 +156,7 @@ async function startMic() {
 
   const pick = pickMicCommand();
   if (!pick) return false;
-  if (mic) return true; // reuse the running mic across session retries
+  if (mic) return true; // reuse the running mic across sessions
 
   return new Promise((resolve) => {
     mic = spawn(pick.cmd, pick.args, { stdio: ["ignore", "pipe", "pipe"] });
@@ -174,10 +180,13 @@ async function startMic() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// audio pipeline: buffer + VAD/micro-batch flush → local transcription
+// ---------------------------------------------------------------------------
 function onAudioChunk(chunk) {
-  if (ending || !wsReady || !ws || ws.readyState !== WebSocket.OPEN) return;
-  ws.send(JSON.stringify({ type: "input_audio.append", audio: chunk.toString("base64") }));
-  audioWindowBytes += chunk.length;
+  if (ending || !pyReady || !py || py.exitCode !== null) return;
+  audioBuffer = Buffer.concat([audioBuffer, chunk]);
+  windowBytes += chunk.length;
   lastAudioAt = Date.now();
 
   // --- VAD: flush after a stretch of silence so final text lands promptly ---
@@ -190,19 +199,23 @@ function onAudioChunk(chunk) {
   }
 
   // --- micro-batch: flush every FLUSH_MS worth of audio (default 15s) ---
-  if (audioWindowBytes >= (FLUSH_MS / 1000) * BYTES_PER_SEC) {
-    audioWindowBytes = 0;
+  if (windowBytes >= (FLUSH_MS / 1000) * BYTES_PER_SEC) {
+    windowBytes = 0;
     flushWindow();
   }
 }
 
 function flushWindow() {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
+  if (!py || !pyReady || ending) return;
   const now = Date.now();
   if (now - lastFlushAt < 500) return; // never flush twice within 500ms
   lastFlushAt = now;
-  audioWindowBytes = 0;
-  ws.send(JSON.stringify({ type: "input_audio.flush" }));
+  if (audioBuffer.length === 0) return;
+  py.stdin.write(JSON.stringify({ type: "audio", data: audioBuffer.toString("base64") }) + "\n");
+  py.stdin.write(JSON.stringify({ type: "flush" }) + "\n");
+  audioBuffer = Buffer.alloc(0);
+  windowBytes = 0;
+  silentSince = null;
 }
 
 function computeRms(buf) {
@@ -216,162 +229,93 @@ function computeRms(buf) {
 }
 
 // ---------------------------------------------------------------------------
-// Mistral realtime WebSocket
+// local faster-whisper subprocess
 // ---------------------------------------------------------------------------
-// Transient server errors (vLLM TooManyRequestsError, EngineDeadError,
-// streaming timeouts, premature closes) bubble up from Mistral's realtime
-// backend as error events or early closes. Retry the session with backoff
-// instead of dying — the backend is occasionally capacity-limited, and when
-// its engine core crashes it restarts and the next session works.
-function isTransient(msg) {
-  const s = String(msg ?? "").toLowerCase();
-  // vLLM error class names arrive camelCased with no spaces
-  // (e.g. "TooManyRequestsError", "EngineBusyError", "RateLimitError",
-  // "EngineDeadError"). Any raw `Unexpected <class 'vllm...'>` leak is a
-  // server-side failure worth retrying.
-  return /too many requests|toomanyrequests|429|timeout|overloaded|rate\s*limit|ratelimit|capacity|unavailable|temporarily|busy|enginedead|enginecore|engine core|unexpected\s*<class\s*'vllm/i.test(s);
+function startPython() {
+  py = spawn(PYTHON, [WORKER_PY], {
+    stdio: ["pipe", "pipe", "pipe"],
+    env: {
+      ...process.env,
+      PI_STT_MODEL: MODEL,
+      PI_STT_DEVICE: DEVICE,
+      PI_STT_COMPUTE: COMPUTE,
+    },
+  });
+
+  py.on("error", (err) => {
+    send({ type: "error", message: `Failed to start faster-whisper worker: ${err.message}` });
+    cleanup(1);
+  });
+
+  py.stderr.setEncoding("utf8");
+  py.stderr.on("data", (d) => {
+    pyStderr += d;
+    if (pyStderr.length > 4000) pyStderr = pyStderr.slice(-4000);
+  });
+
+  py.stdout.setEncoding("utf8");
+  let buf = "";
+  py.stdout.on("data", (d) => {
+    buf += d;
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl);
+      buf = buf.slice(nl + 1);
+      if (!line.trim()) continue;
+      try {
+        handlePyMessage(JSON.parse(line));
+      } catch {
+        /* ignore malformed line */
+      }
+    }
+  });
+
+  py.on("exit", (code) => {
+    py = null;
+    if (!doneReceived) {
+      const tail = pyStderr.trim().split("\n").slice(-2).join(" ").slice(0, 300);
+      if (!ending) {
+        send({ type: "error", message: `Local Whisper worker exited unexpectedly (${code})${tail ? `: ${tail}` : ""}` });
+      }
+      cleanup(1);
+    }
+  });
 }
 
-// Engine crashes (EngineDeadError / "EngineCore encountered an issue")
-// recover slower than rate limits — the backend must restart the engine and
-// reload the model — so give those a longer backoff.
-function isEngineCrash(msg) {
-  return /enginedead|enginecore|engine core/i.test(String(msg ?? ""));
-}
-
-// Pull the vLLM exception class out of `Unexpected <class 'vllm...'>` for
-// readable status/error messages (e.g. "EngineDeadError").
-function errorClass(msg) {
-  const m = String(msg ?? "").match(/<class\s+'([^']+)'>/);
-  return m ? m[1].split(".").pop() : "";
-}
-
-// User-facing message once retries are exhausted.
-function friendlyFinalError(reason, crash) {
-  const cls = errorClass(reason);
-  if (crash) {
-    return `Mistral's transcription backend crashed (${cls || "engine error"}) — server-side issue. Tried ${MAX_RETRIES} reconnects; try Alt+M again in a minute.`;
+function handlePyMessage(msg) {
+  switch (msg.type) {
+    case "ready":
+      pyReady = true;
+      send({ type: "ready", model: msg.model ?? MODEL, sampleRate: msg.sampleRate ?? SAMPLE_RATE });
+      void startMic().then((ok) => {
+        if (!ok && !ending) {
+          send({ type: "error", message: "No mic capture tool found (need ffmpeg, arecord, or sox)." });
+          cleanup(1);
+        }
+      });
+      break;
+    case "segment":
+      if (msg.text) send({ type: "segment", text: msg.text });
+      break;
+    case "done":
+      doneReceived = true;
+      send({ type: "done", text: msg.text ?? "", language: msg.language ?? null });
+      cleanup(0);
+      break;
+    case "status":
+      send({ type: "status", message: msg.message ?? "" });
+      break;
+    case "error":
+      send({ type: "error", message: msg.message ?? "unknown error" });
+      cleanup(1);
+      break;
+    default:
+      break;
   }
-  return `Mistral backend still unavailable after ${MAX_RETRIES} retries (${cls || "capacity"}) — try Alt+M again shortly.`;
 }
 
-function restartSession(reason, crash = false) {
-  if (ending || retries >= MAX_RETRIES || retryTimer) return false;
-  retries++;
-  const delay = (crash ? 5000 : 2000) * retries; // crashes: 5s/10s/15s; capacity: 2s/4s/8s
-  wsReady = false;
-  if (mic && mic.kind === "file") mic.kill(); // stop replay of a test file
-  if (retryTimer) clearTimeout(retryTimer);
-  const short = crash ? errorClass(reason) || "engine crash" : reason;
-  send({ type: "status", message: `Mistral ${crash ? "backend crashed" : "busy"} (${short}) — retrying in ${(delay / 1000).toFixed(0)}s (${retries}/${MAX_RETRIES})` });
-  retryTimer = setTimeout(() => {
-    retryTimer = null;
-    if (ending) return;
-    try {
-      if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, "retry");
-    } catch {}
-    ws = null;
-    openSocket();
-  }, delay);
-  return true;
-}
-
-function openSocket() {
-  ws = new WebSocket(WS_URL, {
-    headers: { Authorization: `Bearer ${API_KEY}` },
-  });
-  const thisWs = ws; // distinguish this socket from any retry socket
-
-  ws.addEventListener("open", () => {
-    // No audio until we know the session's negotiated format.
-  });
-
-  ws.addEventListener("message", (ev) => {
-    let data = ev.data;
-    if (data instanceof ArrayBuffer) data = new TextDecoder().decode(data);
-    else if (data && typeof data === "object" && typeof data.text === "function") data = data.text();
-    if (typeof data !== "string") return;
-    if (thisWs !== ws) return; // stale socket from a superseded session
-
-    let msg;
-    try {
-      msg = JSON.parse(data);
-    } catch {
-      return;
-    }
-
-    switch (msg.type) {
-      case "session.created": {
-        // Announce format, then start feeding audio.
-        ws.send(
-          JSON.stringify({
-            type: "session.update",
-            session: {
-              audio_format: { encoding: "pcm_s16le", sample_rate: SAMPLE_RATE },
-              target_streaming_delay_ms: DELAY_MS,
-            },
-          }),
-        );
-        break;
-      }
-      case "session.updated": {
-        wsReady = true;
-        send({ type: "ready", model: MODEL, sampleRate: SAMPLE_RATE });
-        void startMic().then((ok) => {
-          if (!ok && !ending) {
-            send({ type: "error", message: "No mic capture tool found (need ffmpeg, arecord, or sox)." });
-            cleanup(1);
-          }
-        });
-        break;
-      }
-      case "transcription.language":
-        break; // informational
-      case "transcription.text.delta":
-        if (msg.text) send({ type: "delta", text: msg.text });
-        break;
-      case "transcription.segment":
-        if (msg.text) send({ type: "segment", text: msg.text });
-        break;
-      case "transcription.done":
-        doneReceived = true;
-        send({ type: "done", text: msg.text ?? "", language: msg.language ?? null });
-        cleanup(0);
-        break;
-      case "error": {
-        const detail = msg.error?.message ?? msg.error ?? "unknown error";
-        const detailStr = typeof detail === "string" ? detail : JSON.stringify(detail);
-        const transient = isTransient(detailStr);
-        const crash = isEngineCrash(detailStr);
-        if (transient && restartSession(detailStr, crash)) break; // retry scheduled
-        if (retryTimer) break; // already retrying — ignore duplicate trigger
-        // Retries exhausted (or non-transient): report. Transient-but-exhausted
-        // errors get a readable summary instead of the raw vLLM dump.
-        send({ type: "error", message: transient ? friendlyFinalError(detailStr, crash) : `Mistral: ${detailStr}` });
-        cleanup(1);
-        break;
-      }
-      default:
-        break;
-    }
-  });
-
-  ws.addEventListener("close", (ev) => {
-    if (thisWs !== ws) return; // stale socket from a superseded session
-    if (!doneReceived && !ending) {
-      const reason = `Mistral WebSocket closed unexpectedly (${ev.code}${ev.reason ? `: ${ev.reason}` : ""})`;
-      // Capacity errors often surface as an early close before the session is
-      // ready (or as an error event matching isTransient) — retry those.
-      if (restartSession(reason)) return; // retry scheduled
-      if (retryTimer) return; // retry already pending — ignore close of the old socket
-      send({ type: "error", message: friendlyFinalError(reason, isEngineCrash(reason)) });
-    }
-    cleanup(doneReceived ? 0 : 1);
-  });
-
-  ws.addEventListener("error", () => {
-    // 'close' follows; do the reporting there.
-  });
+function active() {
+  return !doneReceived || !ending;
 }
 
 // ---------------------------------------------------------------------------
@@ -380,15 +324,19 @@ function openSocket() {
 function stopListening() {
   if (ending) return;
   ending = true;
-  if (retryTimer) {
-    clearTimeout(retryTimer);
-    retryTimer = null;
-  }
   if (mic && typeof mic.kill === "function") mic.kill("SIGTERM");
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "input_audio.end" }));
-    // Mistral finalizes and sends transcription.done; fall back if slow.
-    finalTimer = setTimeout(() => cleanup(0), 10000);
+  if (py && py.exitCode === null) {
+    // Send the final audio window, then end — python replies with done.
+    if (audioBuffer.length > 0) {
+      py.stdin.write(JSON.stringify({ type: "audio", data: audioBuffer.toString("base64") }) + "\n");
+      audioBuffer = Buffer.alloc(0);
+    }
+    py.stdin.write(JSON.stringify({ type: "end" }) + "\n");
+    // Fall back if python never replies. If the model is still loading (first
+    // run downloads it), give it plenty of time; once ready, transcription of
+    // any remaining window takes seconds.
+    const fallbackMs = pyReady ? 30000 : 600000;
+    finalTimer = setTimeout(() => cleanup(0), fallbackMs);
   } else {
     cleanup(0);
   }
@@ -396,14 +344,17 @@ function stopListening() {
 
 function cleanup(code) {
   if (finalTimer) clearTimeout(finalTimer);
-  if (retryTimer) {
-    clearTimeout(retryTimer);
-    retryTimer = null;
-  }
   if (mic && typeof mic.kill === "function") mic.kill("SIGTERM");
-  try {
-    if (ws && ws.readyState === WebSocket.OPEN) ws.close(1000, "done");
-  } catch {}
+  if (py && py.exitCode === null) {
+    try {
+      py.stdin.end();
+    } catch {}
+    setTimeout(() => {
+      try {
+        py.kill("SIGTERM");
+      } catch {}
+    }, 500);
+  }
   send({ type: "exited", code });
   process.exit(code);
 }
@@ -439,4 +390,4 @@ function intArg(argName, envName, def) {
   return Number.isFinite(n) && n > 0 ? Math.round(n) : def;
 }
 
-openSocket();
+startPython();

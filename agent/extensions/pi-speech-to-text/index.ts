@@ -2,42 +2,40 @@
  * pi-speech-to-text
  *
  * Toggle speech-to-text with a keybinding while the input prompt is focused.
- * Press `Alt+M` (or run `/stt`) to start dictating: microphone audio streams
- * to Mistral's realtime transcription WebSocket, partial transcriptions are
- * streamed into the prompt as you speak, and a live widget above the editor
- * shows the transcript permutating while listening. Press the key again to
- * stop; the final authoritative transcript replaces the partial text.
+ * Press `Alt+M` (or run `/stt`) to start dictating: microphone audio is
+ * transcribed LOCALLY by faster-whisper (a small Whisper model runs on this
+ * machine via stt_worker.py), segments are written into the prompt as they
+ * are transcribed, and a live widget above the editor shows the transcript
+ * while listening. Press the key again to stop; the final authoritative
+ * transcript replaces the partial text.
  *
  * Requirements:
- *   - MISTRAL_API_KEY environment variable
+ *   - faster-whisper installed in .venv (see README)
  *   - a mic capture tool: ffmpeg (any OS), arecord (Linux), or sox
  *
  * Configuration (environment variables):
- *   MISTRAL_API_KEY        API key (required)
- *   PI_STT_MODEL           model id (default voxtral-mini-transcribe-realtime-2602)
- *   PI_STT_DELAY_MS        target streaming delay: low = live text as you
- *                          speak, high = more accurate but arrives later
- *                          (default 800)
- *   PI_STT_FLUSH_MS        micro-batch window: audio is sent to Mistral in
+ *   PI_STT_MODEL           Whisper model size (default "small")
+ *   PI_STT_DEVICE          "cpu" (default) — no GPU needed
+ *   PI_STT_COMPUTE         quantization (default "int8")
+ *   PI_STT_FLUSH_MS        micro-batch window: audio is transcribed in
  *                          batches of this many seconds worth (default 15000
  *                          = 15s of speech per batch)
  *   PI_STT_SILENCE_MS      after this much silence, the current batch is
  *                          flushed so the text you just said lands promptly
  *                          (default 1500)
  *   PI_STT_DEVICE          optional mic device override for ffmpeg/arecord
+ *   PI_STT_PYTHON          python binary with faster-whisper (default:
+ *                          <extension>/.venv/bin/python)
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
-import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Key } from "@earendil-works/pi-tui";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { readFileSync, writeFileSync, chmodSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const WORKER = join(dirname(fileURLToPath(import.meta.url)), "worker.mjs");
 const WIDGET = "pi-stt";
 const EDITOR_MIN_INTERVAL_MS = 120;
-const CONFIG_FILE = join(getAgentDir(), "pi-speech-to-text.json");
 
 interface WorkerMessage {
   type: string;
@@ -90,7 +88,7 @@ export default function (pi: ExtensionAPI) {
       body.length > 160 ? `${body.slice(0, 157)}…` : body || "…listening…";
     const statusLine =
       status === "connecting"
-        ? "🎤 Connecting to Mistral…"
+        ? "🎤 Starting local Whisper…"
         : status === "finalizing"
           ? "🎤 Finalizing transcript…"
           : "🎤 Listening — speak now (Alt+M to stop)";
@@ -118,47 +116,12 @@ export default function (pi: ExtensionAPI) {
   }
 
   // -------------------------------------------------------------------------
-  // token / config file
-  // -------------------------------------------------------------------------
-  function readApiKey(): string | null {
-    try {
-      if (existsSync(CONFIG_FILE)) {
-        const cfg = JSON.parse(readFileSync(CONFIG_FILE, "utf8")) as { apiKey?: string };
-        if (cfg.apiKey && cfg.apiKey.trim()) return cfg.apiKey.trim();
-      }
-    } catch {
-      // fall through to env
-    }
-    const env = process.env.MISTRAL_API_KEY;
-    return env && env.trim() ? env.trim() : null;
-  }
-
-  function saveApiKey(key: string): { ok: boolean; message: string } {
-    if (!key) return { ok: false, message: "No token provided" };
-    try {
-      writeFileSync(CONFIG_FILE, `${JSON.stringify({ apiKey: key.trim() }, null, 2)}\n`, { mode: 0o600 });
-      chmodSync(CONFIG_FILE, 0o600);
-      return { ok: true, message: `Saved Mistral token to ${CONFIG_FILE}` };
-    } catch (err) {
-      return { ok: false, message: `Failed to save token: ${(err as Error).message}` };
-    }
-  }
-
-  // -------------------------------------------------------------------------
   // worker lifecycle
   // -------------------------------------------------------------------------
   function start(ctx: ExtensionContext) {
     if (active) return;
     if (!ctx.hasUI || ctx.mode !== "tui") {
       ctx.ui.notify("pi-speech-to-text needs the interactive TUI", "error");
-      return;
-    }
-    const apiKey = readApiKey();
-    if (!apiKey) {
-      ctx.ui.notify(
-        "pi-speech-to-text: no Mistral token. Run `/stt key <TOKEN>` or set MISTRAL_API_KEY",
-        "error",
-      );
       return;
     }
 
@@ -172,11 +135,11 @@ export default function (pi: ExtensionAPI) {
     status = "connecting";
 
     updateWidget(ctx);
-    ctx.ui.setStatus(WIDGET, "🎤 Connecting…");
+    ctx.ui.setStatus(WIDGET, "🎤 Starting local Whisper…");
 
     worker = spawn(process.execPath, [WORKER], {
       stdio: ["pipe", "pipe", "pipe"],
-      env: { ...process.env, MISTRAL_API_KEY: apiKey },
+      env: { ...process.env },
     });
 
     worker.on("error", (err) => {
@@ -247,7 +210,7 @@ export default function (pi: ExtensionAPI) {
         scheduleEditorUpdate(ctx, true);
         break;
       case "status":
-        // worker is retrying a transient Mistral backend error
+        // worker reported an informational state (e.g. model still loading)
         status = "connecting";
         updateWidget(ctx);
         break;
@@ -308,32 +271,16 @@ export default function (pi: ExtensionAPI) {
   };
 
   pi.registerShortcut(Key.alt("m"), {
-    description: "Toggle speech-to-text (mic → Mistral → prompt)",
+    description: "Toggle speech-to-text (mic → local Whisper → prompt)",
     handler: async (ctx) => {
       await toggle(ctx);
     },
   });
 
   pi.registerCommand("stt", {
-    description: "Toggle mic speech-to-text (Mistral realtime); /stt on|off|key",
+    description: "Toggle mic speech-to-text (local faster-whisper); /stt on|off",
     handler: async (args, ctx) => {
       const arg = (args ?? "").trim();
-      if (arg.startsWith("key ")) {
-        const token = arg.slice(4).trim();
-        const res = saveApiKey(token);
-        ctx.ui.notify(res.message, res.ok ? "info" : "error");
-        return;
-      }
-      if (arg === "key") {
-        const has = readApiKey();
-        ctx.ui.notify(
-          has
-            ? `Mistral token is configured (${CONFIG_FILE} or MISTRAL_API_KEY)`
-            : `No Mistral token yet — run /stt key <TOKEN> or set MISTRAL_API_KEY`,
-          has ? "info" : "warning",
-        );
-        return;
-      }
       const low = arg.toLowerCase();
       if (low === "on") {
         if (active) ctx.ui.notify("pi-speech-to-text already listening", "info");
@@ -344,7 +291,7 @@ export default function (pi: ExtensionAPI) {
       } else if (arg === "") {
         await toggle(ctx);
       } else {
-        ctx.ui.notify("Usage: /stt [on|off|key <TOKEN>|key]", "warning");
+        ctx.ui.notify("Usage: /stt [on|off]", "warning");
       }
     },
   });
