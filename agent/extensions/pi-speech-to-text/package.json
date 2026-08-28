@@ -1,0 +1,18 @@
+{
+  "name": "pi-speech-to-text",
+  "version": "0.1.0",
+  "description": "Toggle mic speech-to-text in pi's prompt: Alt+M to dictate, Mistral realtime transcription streams the transcript into the input as you speak.",
+  "type": "module",
+  "keywords": ["pi-package", "speech-to-text", "stt", "mic", "mistral", "voxtral"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

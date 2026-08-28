@@ -1,6 +1,7 @@
 # Secrets — never commit
 agent/auth.json
 agent/models-store.json
+agent/pi-speech-to-text.json
 
 # Machine-specific
 agent/trust.json
