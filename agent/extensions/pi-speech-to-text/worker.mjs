@@ -218,25 +218,52 @@ function computeRms(buf) {
 // ---------------------------------------------------------------------------
 // Mistral realtime WebSocket
 // ---------------------------------------------------------------------------
-// Transient server errors (vLLM TooManyRequestsError, streaming timeouts,
-// premature closes) bubble up from Mistral's realtime backend as error events
-// or early closes. Retry the session with backoff instead of dying — the
-// backend is occasionally capacity-limited.
+// Transient server errors (vLLM TooManyRequestsError, EngineDeadError,
+// streaming timeouts, premature closes) bubble up from Mistral's realtime
+// backend as error events or early closes. Retry the session with backoff
+// instead of dying — the backend is occasionally capacity-limited, and when
+// its engine core crashes it restarts and the next session works.
 function isTransient(msg) {
   const s = String(msg ?? "").toLowerCase();
   // vLLM error class names arrive camelCased with no spaces
-  // (e.g. "TooManyRequestsError", "EngineBusyError", "RateLimitError")
-  return /too many requests|toomanyrequests|429|timeout|overloaded|rate\s*limit|ratelimit|capacity|unavailable|temporarily|busy/i.test(s);
+  // (e.g. "TooManyRequestsError", "EngineBusyError", "RateLimitError",
+  // "EngineDeadError"). Any raw `Unexpected <class 'vllm...'>` leak is a
+  // server-side failure worth retrying.
+  return /too many requests|toomanyrequests|429|timeout|overloaded|rate\s*limit|ratelimit|capacity|unavailable|temporarily|busy|enginedead|enginecore|engine core|unexpected\s*<class\s*'vllm/i.test(s);
 }
 
-function restartSession(reason) {
+// Engine crashes (EngineDeadError / "EngineCore encountered an issue")
+// recover slower than rate limits — the backend must restart the engine and
+// reload the model — so give those a longer backoff.
+function isEngineCrash(msg) {
+  return /enginedead|enginecore|engine core/i.test(String(msg ?? ""));
+}
+
+// Pull the vLLM exception class out of `Unexpected <class 'vllm...'>` for
+// readable status/error messages (e.g. "EngineDeadError").
+function errorClass(msg) {
+  const m = String(msg ?? "").match(/<class\s+'([^']+)'>/);
+  return m ? m[1].split(".").pop() : "";
+}
+
+// User-facing message once retries are exhausted.
+function friendlyFinalError(reason, crash) {
+  const cls = errorClass(reason);
+  if (crash) {
+    return `Mistral's transcription backend crashed (${cls || "engine error"}) — server-side issue. Tried ${MAX_RETRIES} reconnects; try Alt+M again in a minute.`;
+  }
+  return `Mistral backend still unavailable after ${MAX_RETRIES} retries (${cls || "capacity"}) — try Alt+M again shortly.`;
+}
+
+function restartSession(reason, crash = false) {
   if (ending || retries >= MAX_RETRIES || retryTimer) return false;
   retries++;
-  const delay = 2000 * retries; // 2s, 4s, 8s backoff
+  const delay = (crash ? 5000 : 2000) * retries; // crashes: 5s/10s/15s; capacity: 2s/4s/8s
   wsReady = false;
   if (mic && mic.kind === "file") mic.kill(); // stop replay of a test file
   if (retryTimer) clearTimeout(retryTimer);
-  send({ type: "status", message: `Mistral busy (${reason}) — retrying in ${(delay / 1000).toFixed(0)}s (${retries}/${MAX_RETRIES})` });
+  const short = crash ? errorClass(reason) || "engine crash" : reason;
+  send({ type: "status", message: `Mistral ${crash ? "backend crashed" : "busy"} (${short}) — retrying in ${(delay / 1000).toFixed(0)}s (${retries}/${MAX_RETRIES})` });
   retryTimer = setTimeout(() => {
     retryTimer = null;
     if (ending) return;
@@ -314,11 +341,13 @@ function openSocket() {
       case "error": {
         const detail = msg.error?.message ?? msg.error ?? "unknown error";
         const detailStr = typeof detail === "string" ? detail : JSON.stringify(detail);
-        if (isTransient(detailStr)) {
-          if (restartSession(detailStr)) break; // retry scheduled
-          if (retryTimer) break; // already retrying — ignore duplicate trigger
-        }
-        send({ type: "error", message: `Mistral: ${detailStr}` });
+        const transient = isTransient(detailStr);
+        const crash = isEngineCrash(detailStr);
+        if (transient && restartSession(detailStr, crash)) break; // retry scheduled
+        if (retryTimer) break; // already retrying — ignore duplicate trigger
+        // Retries exhausted (or non-transient): report. Transient-but-exhausted
+        // errors get a readable summary instead of the raw vLLM dump.
+        send({ type: "error", message: transient ? friendlyFinalError(detailStr, crash) : `Mistral: ${detailStr}` });
         cleanup(1);
         break;
       }
@@ -335,7 +364,7 @@ function openSocket() {
       // ready (or as an error event matching isTransient) — retry those.
       if (restartSession(reason)) return; // retry scheduled
       if (retryTimer) return; // retry already pending — ignore close of the old socket
-      send({ type: "error", message: reason });
+      send({ type: "error", message: friendlyFinalError(reason, isEngineCrash(reason)) });
     }
     cleanup(doneReceived ? 0 : 1);
   });

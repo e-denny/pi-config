@@ -64,9 +64,12 @@ While listening:
   partials so the prompt ends up with accurate text.
 - **Transient backend errors are retried automatically.** Mistral's realtime
   backend occasionally returns capacity errors (vLLM `TooManyRequestsError`,
-  streaming timeouts, early socket closes). The worker reconnects up to 3 times
-  with 2s/4s/8s backoff before giving up; the widget shows the retry state.
-  Non-transient errors (e.g. bad API key) fail immediately.
+  streaming timeouts, early socket closes) and sometimes its engine core
+  crashes (`EngineDeadError`) — the backend restarts it and the next session
+  works. The worker reconnects up to 3 times with backoff (2s/4s/8s for
+  capacity errors, 5s/10s/15s for engine crashes) before giving up; the widget
+  shows the retry state. Non-transient errors (e.g. bad API key) fail
+  immediately.
 
 ## Configuration (environment variables)
 
