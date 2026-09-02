@@ -43,11 +43,14 @@ const SILENCE_RMS_THRESHOLD = 350; // ~1% of full scale, mic noise tolerant
 const MAX_BUFFER_SECONDS = 120; // cap audio buffered while workers still load
 
 const args = parseArgs();
-const MODEL = args.model || process.env.PI_STT_MODEL || "small";
+const MODEL = args.model || process.env.PI_STT_MODEL || "base";
 const DEVICE = args.device || process.env.PI_STT_DEVICE || "cpu";
 const COMPUTE = args.compute || process.env.PI_STT_COMPUTE || "int8";
 const BEAM = intArg("beam", "PI_STT_BEAM", 1);
-const LANGUAGE = args.language || process.env.PI_STT_LANGUAGE || "";
+// English-only (.en) models can't transcribe other languages, so force "en"
+// and skip faster-whisper's per-window language-detection pass. Overridable
+// via PI_STT_LANGUAGE; multilingual models keep auto-detect.
+const LANGUAGE = args.language || process.env.PI_STT_LANGUAGE || (MODEL.endsWith(".en") ? "en" : "");
 const VAD = args.vad !== "0" && (process.env.PI_STT_VAD ?? "1") !== "0";
 const WINDOW_MS = intArg("windowMs", "PI_STT_WINDOW_MS", 5000);
 const WORKERS = Math.max(1, Math.min(8, intArg("workers", "PI_STT_WORKERS", 2)));

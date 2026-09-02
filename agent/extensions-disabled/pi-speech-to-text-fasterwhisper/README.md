@@ -3,7 +3,7 @@
 Dictate into pi's input prompt with your microphone — **fully local, no API
 key, no cloud**. **Hold Alt+M** while the prompt is focused: the microphone
 starts immediately and audio is transcribed by **faster-whisper** running a
-Whisper `small` model on your own machine. Segments are written into the
+Whisper `base` model on your own machine. Segments are written into the
 prompt as they are transcribed, and a live widget above the editor shows the
 accumulated text while you talk. **Release Alt+M to stop**; the final
 transcript replaces the partial text. Every other key — including the Space
@@ -26,7 +26,7 @@ terminals without Kitty keyboard protocol support Alt+M toggles instead.
    wezterm, foot, konsole, etc. Hold-to-dictate needs key-release events,
    which only the Kitty keyboard protocol provides. In other terminals
    Alt+M acts as a toggle instead (and the extension warns once).
-2. **Python dependencies** (one-time, ~250 MB model downloaded on first use):
+2. **Python dependencies** (one-time, ~0.2 GB of model files downloaded on first use):
 
    ```
    cd ~/.pi/agent/extensions/pi-speech-to-text
@@ -72,7 +72,7 @@ While dictating:
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `PI_STT_MODEL` | `small` | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3` |
+| `PI_STT_MODEL` | `base` | Whisper model size: `tiny`, `base`, `small`, `medium`, `large-v3` (append `.en` for English-only variants) |
 | `PI_STT_DEVICE` | `cpu` | `cpu` (default) or `cuda`/`auto` if you have a GPU |
 | `PI_STT_COMPUTE` | `int8` | Quantization: `int8` (fast, low memory) or `float16`/`float32` |
 | `PI_STT_BEAM` | `1` | Beam size (higher = more accurate, slower) |

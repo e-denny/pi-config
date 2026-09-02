@@ -19,10 +19,15 @@ Leaves unchanged (they cannot be wrapped, even if over width):
   - headings, blank lines, horizontal rules
   - display math blocks ($$...$$), single- or multi-line
   - table rows (| ...)
+  - embedded images (![...](url)) — each stays on its own line and is never
+    reflowed; prose paragraphs break before/after an image line so the image
+    is not pulled inline
 
 Atomic tokens (never split; moved whole to the next line when they don't fit):
   - Obsidian wikilinks: [[slug]] and [[slug|display text]]
-  - inline LaTeX: $...$
+  - inline LaTeX: $...$ (opening $ followed by non-whitespace, closing $
+    preceded by non-whitespace — so currency amounts like $500bn and escaped
+    dollar signs are left as plain text)
   - markdown links: [label](url)
   - inline code: `...`
 
@@ -40,7 +45,11 @@ import argparse
 import shutil
 
 ATOMIC = re.compile(
-    r'\$[^$\n]+\$'                   # inline math
+    r'(?<!\\)\$(?=\S)[^$\n]+?(?<=\S)\$'  # inline math (LaTeX/GitHub rule:
+                                               # opening $ must be followed by
+                                               # non-whitespace, closing $ must
+                                               # be preceded by non-whitespace;
+                                               # \$ escapes are not delimiters)
     r'|\[\[[^\]\n]*\]\]'             # wikilink: [[slug]] or [[slug|display text]]
     r'|\[[^\]\n]*\]\([^)\n]*\)'      # markdown link: [label](url)
     r'|`[^`\n]+`'                    # inline code
@@ -52,6 +61,10 @@ OPEN_WIKILINK = re.compile(r'\[\[[^\]\n]*$')
 LIST_MARKER = re.compile(r'^(\s*)([-*+]|\d+[.)])(\s+)')
 FOOTNOTE = re.compile(r'^\[\^\S+?\]:')
 HR = re.compile(r'^(-{3,}|\*{3,}|_{3,})\s*$')
+# An embedded image on its own line: ![alt](url), possibly with whitespace.
+# (A line mixing prose and an image token is not matched; the token stays
+# atomic inside the paragraph instead.)
+IMAGE_LINE = re.compile(r'^\s*!\[[^\]\n]*\]\([^)\n]*\)\s*$')
 
 
 def tokenise(text):
@@ -179,6 +192,12 @@ def reflow(path, width=100):
             i += 1
             continue
 
+        # Embedded image — starts its own line, never reflowed
+        if IMAGE_LINE.match(line):
+            emit([line], True)
+            i += 1
+            continue
+
         # Fenced code block
         if line.startswith('```') or line.startswith('~~~'):
             j = i + 1
@@ -222,7 +241,8 @@ def reflow(path, width=100):
                 nl = src[j]
                 if (nl.strip() == '' or nl.startswith('#') or nl.startswith('>')
                         or nl.startswith('    ') or nl.startswith('|')
-                        or nl.startswith('$$') or FOOTNOTE.match(nl)):
+                        or nl.startswith('$$') or FOOTNOTE.match(nl)
+                        or IMAGE_LINE.match(nl)):
                     break
                 block.append(nl)
                 j += 1
@@ -267,7 +287,7 @@ def reflow(path, width=100):
                 if (nl.strip() == '' or nl.startswith('#') or nl.startswith('>')
                         or nl.startswith('|') or nl.startswith('$$')
                         or nl.startswith('```') or FOOTNOTE.match(nl) or HR.match(nl)
-                        or LIST_MARKER.match(nl)):
+                        or LIST_MARKER.match(nl) or IMAGE_LINE.match(nl)):
                     break          # new item (any indent) or new block
                 item.append(nl)
                 j += 1
@@ -292,7 +312,7 @@ def reflow(path, width=100):
                 if (nl.strip() == '' or not nl.startswith('    ')
                         or nl.startswith('#') or nl.startswith('>') or nl.startswith('|')
                         or nl.startswith('$$') or FOOTNOTE.match(nl)
-                        or LIST_MARKER.match(nl)):
+                        or LIST_MARKER.match(nl) or IMAGE_LINE.match(nl)):
                     break
                 block.append(nl)
                 j += 1
@@ -319,7 +339,7 @@ def reflow(path, width=100):
             if (nl.strip() == '' or nl.startswith('#') or nl.startswith('>')
                     or nl.startswith('|') or nl.startswith('$$') or nl.startswith('```')
                     or nl.startswith('    ') or FOOTNOTE.match(nl) or HR.match(nl)
-                    or LIST_MARKER.match(nl)):
+                    or LIST_MARKER.match(nl) or IMAGE_LINE.match(nl)):
                 break
             para.append(nl)
             j += 1

@@ -24,9 +24,15 @@ across lines) are rewritten** — compliant paragraphs stay byte-identical.
 
 - Obsidian wikilinks: `[[slug]]`, `[[slug|display text]]` (the whole `[[…]]`
   token, including a multi-word display text)
-- Inline LaTeX: `$...$`
+- Inline LaTeX: `$...$` (opening `$` must be followed by non-whitespace,
+  closing `$` must be preceded by non-whitespace — so currency amounts like
+  `$500bn` and escaped dollar signs stay plain text)
 - Markdown links: `[label](url)`
 - Inline code: `` `...` ``
+- Embedded images: `![alt](url)` — each image line starts its own block and is
+  never reflowed; prose paragraphs break before/after an image line so the
+  image is never pulled inline. (A line mixing prose and an image token is not
+  split; the token stays atomic inside the paragraph.)
 
 Wikilinks/links that were already split across lines are rejoined and
 normalised when their paragraph is reflowed.
@@ -37,7 +43,7 @@ normalised when their paragraph is reflowed.
 - Tables (rows starting with `|`)
 - Display math blocks (`$$…$$`, single- or multi-line)
 - Fenced code blocks (```` ``` ```` / `~~~`), HTML comments, headings, blank
-  lines, horizontal rules
+  lines, horizontal rules, embedded images (`![alt](url)`)
 
 These are exempt from the wiki's line-length rule, so lines that remain over
 the limit inside them are expected.

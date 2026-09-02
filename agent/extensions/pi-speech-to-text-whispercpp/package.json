@@ -1,0 +1,18 @@
+{
+  "name": "pi-speech-to-text-whispercpp",
+  "version": "0.1.0",
+  "description": "Hold Alt+M to dictate into pi's prompt: a persistent local whisper.cpp (whisper-server) backend transcribes 5s audio windows and streams the transcript into the input as you speak.",
+  "type": "module",
+  "keywords": ["pi-package", "speech-to-text", "stt", "mic", "whisper", "whisper.cpp", "local", "ggml"],
+  "license": "MIT",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}

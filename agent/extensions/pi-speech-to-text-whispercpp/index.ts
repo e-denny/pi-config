@@ -1,42 +1,58 @@
 /**
- * pi-speech-to-text
+ * pi-speech-to-text-whispercpp
  *
  * Hold Alt+M to dictate. While the input prompt is focused, press and hold
  * Alt+M: the microphone starts immediately and audio is transcribed LOCALLY
- * by faster-whisper (a small Whisper model runs on this machine via
- * stt_worker.py). Segments are written into the prompt as they are
- * transcribed and a live widget above the editor shows the transcript while
- * listening. Release Alt+M to stop; the final authoritative transcript
- * replaces the partial text.
+ * by whisper.cpp — a persistent `whisper-server` backend runs the model and
+ * the worker POSTs 5 s audio windows to it as WAVs (the "persistent backend,
+ * not CLI" pattern from Allen Kuo's "Choosing a Real-Time Whisper Engine").
+ * Segments are written into the prompt as they are transcribed and a live
+ * widget above the editor shows the transcript while listening. Release
+ * Alt+M to stop; the final authoritative transcript replaces the partial
+ * text.
+ *
+ * The backend is long-lived: the first dictation starts whisper-server and
+ * loads the model once; subsequent dictations reuse the warm server, so a
+ * second hold of Alt+M starts transcribing almost instantly. No Python, no
+ * faster-whisper, no venv.
  *
  * Alt+M is a modified key, so the terminal reports press/repeat/release as
  * distinct events — no tap-vs-hold timing is needed, and the Space bar (and
  * all other keys) are completely untouched.
  *
- * Parallel transcription: audio is cut into ~5 s windows (PI_STT_WINDOW_MS)
- * and distributed over PI_STT_WORKERS faster-whisper processes, so text
- * keeps landing every few seconds during long dictations.
- *
  * `/stt on|off` remains as a manual toggle, and in terminals without Kitty
  * keyboard protocol support Alt+M toggles instead of hold-to-dictate.
  *
  * Requirements:
- *   - faster-whisper installed in .venv (see README)
+ *   - whisper.cpp installed with `whisper-server` on PATH (Arch: `sudo
+ *     pacman -S whisper-cpp`; brew: `brew install whisper-cpp`; or set
+ *     PI_STT_WHISPER_SERVER to a custom binary). The ggml model is
+ *     downloaded on first use (~0.1-0.5 GB) and cached in <ext>/models/.
  *   - a mic capture tool: ffmpeg (any OS), arecord (Linux), or sox
  *   - a terminal with Kitty keyboard protocol support (kitty, ghostty,
  *     wezterm, foot, konsole) so key-release events are visible. Without it
  *     the extension falls back to the Alt+M toggle.
  *
  * Configuration (environment variables):
- *   PI_STT_MODEL           Whisper model size (default "small")
- *   PI_STT_DEVICE          "cpu" (default) — no GPU needed
- *   PI_STT_COMPUTE         quantization (default "int8")
- *   PI_STT_WORKERS         parallel faster-whisper processes (default 2)
+ *   PI_STT_MODEL           ggml model: "small.en" (default), "base.en",
+ *                          "tiny.en", "small", "medium", "large-v3", ... or a
+ *                          full path to a ggml-*.bin file
+ *   PI_STT_LANGUAGE        force a language code ("en", "de", ...) or leave
+ *                          empty: .en models force "en", multilingual models
+ *                          auto-detect per window
+ *   PI_STT_THREADS         whisper.cpp compute threads (default: cores, max 8)
+ *   PI_STT_BEAM            beam size for beam search (default 1 = greedy)
  *   PI_STT_WINDOW_MS       audio window transcribed per job (default 5000)
+ *   PI_STT_MAX_QUEUE       bounded ASR queue, drop-oldest beyond this (default 8)
  *   PI_STT_MAX_SILENCE_MS  auto-stop after this much silence (default 120000)
+ *   PI_STT_WHISPER_SERVER  whisper-server binary (default: PATH lookup)
+ *   PI_STT_PORT            whisper-server port (default 0 = pick a free port)
+ *   PI_STT_GPU             "1" to allow GPU backends (Metal/CUDA/Vulkan);
+ *                          default CPU-only
  *   PI_STT_DEVICE          optional mic device override for ffmpeg/arecord
- *   PI_STT_PYTHON          python binary with faster-whisper (default:
- *                          <extension>/.venv/bin/python)
+ *   PI_STT_SERVER_VAD      "1" to enable whisper.cpp's neural VAD (silero
+ *                          v6.2.0, ~1 MB, auto-downloaded to models/)
+ *   PI_STT_VAD_MODEL       optional path to a custom ggml VAD model
  */
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import {
@@ -58,22 +74,27 @@ interface WorkerMessage {
   text?: string;
   message?: string;
   code?: number;
+  seq?: number;
   model?: string;
   language?: string | null;
   sampleRate?: number;
 }
 
 export default function (pi: ExtensionAPI) {
-  let active = false;  let worker: ChildProcessWithoutNullStreams | null = null;
+  let active = false; // a dictation session is in progress
+  let worker: ChildProcessWithoutNullStreams | null = null;
+  let workerReady = false; // whisper-server is up inside the worker
+  let wantStart = false; // start requested while the worker/server was warming
+  let currentSeq = 0; // session sequence number (tags start/segment/done)
   let workerErr = "";
   let prefix = ""; // editor content captured at toggle-on
   let segments: string[] = []; // finalized segment texts
-  let partial = ""; // live partial text from deltas
+  let partial = ""; // live partial text from deltas (unused by whisper.cpp)
   let finalText: string | null = null; // authoritative final transcript
   let status: "idle" | "connecting" | "listening" | "finalizing" = "idle";
   let lastEditorAt = 0;
   let editorTimer: NodeJS.Timeout | null = null;
-  let pendingDone = ""; // done text received during shutdown, before worker exit
+  let pendingDone = ""; // done text received during shutdown
 
   // --- hold-Alt+M-to-dictate state --------------------------------------
   let dictating = false; // Alt+M currently held, dictation active
@@ -104,7 +125,7 @@ export default function (pi: ExtensionAPI) {
     if (ctx.mode !== "tui" || !ctx.hasUI) return;
     if (!isKittyProtocolActive()) {
       ctx.ui.notify(
-        "pi-speech-to-text: hold-Alt+M dictation needs a Kitty-keyboard-protocol terminal (kitty, ghostty, wezterm, foot). Using Alt+M toggle instead.",
+        "pi-speech-to-text-whispercpp: hold-Alt+M dictation needs a Kitty-keyboard-protocol terminal (kitty, ghostty, wezterm, foot). Using Alt+M toggle instead.",
         "warning",
       );
       return;
@@ -190,34 +211,21 @@ export default function (pi: ExtensionAPI) {
   }
 
   // -------------------------------------------------------------------------
-  // worker lifecycle
+  // worker lifecycle (one long-lived worker per pi session)
   // -------------------------------------------------------------------------
-  function start(ctx: ExtensionContext) {
-    if (active) return;
-    if (!ctx.hasUI || ctx.mode !== "tui") {
-      ctx.ui.notify("pi-speech-to-text needs the interactive TUI", "error");
-      return;
-    }
-
-    prefix = ctx.ui.getEditorText() ?? "";
-    segments = [];
-    partial = "";
-    finalText = null;
-    pendingDone = "";
+  function spawnWorker(ctx: ExtensionContext) {
+    if (worker) return;
     workerErr = "";
-    active = true;
-    status = "connecting";
-
-    updateWidget(ctx);
-    ctx.ui.setStatus(WIDGET, "🎤 Starting local Whisper…");
-
+    workerReady = false;
     worker = spawn(process.execPath, [WORKER], {
       stdio: ["pipe", "pipe", "pipe"],
       env: { ...process.env },
     });
 
     worker.on("error", (err) => {
-      ctx.ui.notify(`pi-speech-to-text: ${err.message}`, "error");
+      worker = null;
+      workerReady = false;
+      ctx.ui.notify(`pi-speech-to-text-whispercpp: ${err.message}`, "error");
       finalizeStop(ctx);
     });
 
@@ -246,22 +254,43 @@ export default function (pi: ExtensionAPI) {
 
     worker.on("exit", (code) => {
       worker = null;
-      if (code !== 0 && !finalText && active) {
+      workerReady = false;
+      if (code !== 0 && active && !finalText) {
         const tail = workerErr.trim().split("\n").slice(-2).join(" ").slice(0, 300);
-        ctx.ui.notify(`pi-speech-to-text stopped (${code})${tail ? `: ${tail}` : ""}`, "error");
+        ctx.ui.notify(`pi-speech-to-text-whispercpp stopped (${code})${tail ? `: ${tail}` : ""}`, "error");
       }
-      if (active) finalizeStop(ctx);
+      if (active) finalizeStop(ctx); // the worker respawns on the next start
     });
+  }
+
+  function sendWorker(msg: object) {
+    try {
+      worker?.stdin.write(`${JSON.stringify(msg)}\n`);
+    } catch {
+      /* worker dying; its exit handler covers it */
+    }
   }
 
   function handleWorkerMessage(msg: WorkerMessage, ctx: ExtensionContext) {
     switch (msg.type) {
       case "ready":
-        status = "listening";
-        ctx.ui.setStatus(WIDGET, "🎤 Listening — release Alt+M to stop");
-        updateWidget(ctx);
+        workerReady = true;
+        if (wantStart) {
+          wantStart = false;
+          currentSeq += 1;
+          sendWorker({ type: "start", seq: currentSeq });
+        }
+        break;
+      case "listening":
+        if (active && msg.seq === currentSeq) {
+          status = "listening";
+          ctx.ui.setStatus(WIDGET, "🎤 Listening — release Alt+M to stop");
+          updateWidget(ctx);
+        }
         break;
       case "delta": {
+        // whisper.cpp returns whole windows, not token deltas — kept for
+        // forward compatibility with future streaming backends.
         const text = msg.text ?? "";
         if (text && !partial.endsWith(text)) partial += text;
         updateWidget(ctx);
@@ -269,6 +298,7 @@ export default function (pi: ExtensionAPI) {
         break;
       }
       case "segment": {
+        if (msg.seq !== currentSeq) return; // stale session
         const text = (msg.text ?? "").trim();
         if (text) segments.push(text);
         partial = "";
@@ -276,24 +306,61 @@ export default function (pi: ExtensionAPI) {
         scheduleEditorUpdate(ctx, true);
         break;
       }
-      case "done":
+      case "done": {
+        if (msg.seq !== currentSeq) return; // stale session
         finalText = msg.text ?? "";
         pendingDone = finalText;
         status = "finalizing";
         updateWidget(ctx);
         scheduleEditorUpdate(ctx, true);
+        finalizeStop(ctx); // worker stays alive; next start is near-instant
         break;
+      }
       case "status":
-        // worker reported an informational state (e.g. auto-stopped after a
-        // long stretch of silence, or the model is still loading)
-        if (msg.message) ctx.ui.notify(`pi-speech-to-text: ${msg.message}`, "info");
+        // worker reported an informational state (e.g. model download,
+        // auto-stopped after a long stretch of silence)
+        if (msg.message) ctx.ui.notify(`pi-speech-to-text-whispercpp: ${msg.message}`, "info");
         break;
       case "error":
-        ctx.ui.notify(`pi-speech-to-text: ${msg.message ?? "unknown error"}`, "error");
+        ctx.ui.notify(`pi-speech-to-text-whispercpp: ${msg.message ?? "unknown error"}`, "error");
         break;
       default:
         break;
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // session control
+  // -------------------------------------------------------------------------
+  function start(ctx: ExtensionContext) {
+    if (active) return;
+    if (!ctx.hasUI || ctx.mode !== "tui") {
+      ctx.ui.notify("pi-speech-to-text-whispercpp needs the interactive TUI", "error");
+      return;
+    }
+
+    prefix = ctx.ui.getEditorText() ?? "";
+    segments = [];
+    partial = "";
+    finalText = null;
+    pendingDone = "";
+    active = true;
+    status = "connecting";
+
+    updateWidget(ctx);
+    ctx.ui.setStatus(WIDGET, "🎤 Starting local Whisper…");
+
+    if (!worker) {
+      wantStart = true;
+      spawnWorker(ctx);
+      return; // "ready" -> (wantStart) -> sends "start"
+    }
+    if (!workerReady) {
+      wantStart = true;
+      return; // server still warming; "ready" will send the start
+    }
+    currentSeq += 1;
+    sendWorker({ type: "start", seq: currentSeq });
   }
 
   function stop(ctx: ExtensionContext) {
@@ -302,10 +369,15 @@ export default function (pi: ExtensionAPI) {
       status = "finalizing";
       updateWidget(ctx);
       ctx.ui.setStatus(WIDGET, "🎤 Finalizing transcript…");
-      worker?.stdin.write("stop\n");
+      if (workerReady) sendWorker({ type: "stop" });
+      else {
+        // The session never actually started on the worker side (server was
+        // still warming) — finish it locally; no done message will arrive.
+        wantStart = false;
+        finalizeStop(ctx);
+      }
     }
-    // finalizeStop runs when the worker exits (it sends input_audio.end,
-    // receives transcription.done, then exits).
+    // Otherwise a "done" is already on its way -> finalizeStop on arrival.
   }
 
   function finalizeStop(ctx: ExtensionContext) {
@@ -329,10 +401,20 @@ export default function (pi: ExtensionAPI) {
     dictating = false;
     if (worker) {
       try {
-        worker.kill("SIGTERM");
-      } catch {}
-      worker = null;
+        worker.stdin.write('{"type":"exit"}\n');
+        setTimeout(() => {
+          try {
+            worker?.kill("SIGTERM");
+          } catch {}
+        }, 500);
+      } catch {
+        try {
+          worker?.kill("SIGTERM");
+        } catch {}
+      }
     }
+    worker = null;
+    workerReady = false;
     active = false;
     status = "idle";
   }
@@ -358,16 +440,16 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("stt", {
-    description: "Toggle mic speech-to-text (local faster-whisper); /stt on|off",
+    description: "Toggle mic speech-to-text (local whisper.cpp); /stt on|off",
     handler: async (args, ctx) => {
       const arg = (args ?? "").trim();
       const low = arg.toLowerCase();
       if (low === "on") {
-        if (active) ctx.ui.notify("pi-speech-to-text already listening", "info");
+        if (active) ctx.ui.notify("pi-speech-to-text-whispercpp already listening", "info");
         else start(ctx);
       } else if (low === "off") {
         if (active) stop(ctx);
-        else ctx.ui.notify("pi-speech-to-text is not active", "info");
+        else ctx.ui.notify("pi-speech-to-text-whispercpp is not active", "info");
       } else if (arg === "") {
         await toggle(ctx);
       } else {

@@ -58,11 +58,13 @@ def transcribe(model, audio: bytes, beam: int, language, vad: bool, temperatures
 
 
 def main() -> None:
-    model_size = os.environ.get("PI_STT_MODEL", "small")
+    model_size = os.environ.get("PI_STT_MODEL", "base")
     device = os.environ.get("PI_STT_DEVICE", "cpu")
     compute = os.environ.get("PI_STT_COMPUTE", "int8")
     beam = int(os.environ.get("PI_STT_BEAM", "1"))
-    language = os.environ.get("PI_STT_LANGUAGE") or None
+    # English-only (.en) models force "en" (skips language detection); other
+    # models auto-detect unless PI_STT_LANGUAGE is set.
+    language = os.environ.get("PI_STT_LANGUAGE") or (model_size if model_size.endswith(".en") else None)
     vad = os.environ.get("PI_STT_VAD", "1") != "0"
     cpu_threads = int(os.environ.get("PI_STT_CPU_THREADS", "0") or 0)
     temperatures_raw = os.environ.get("PI_STT_TEMPERATURES") or None
