@@ -9,7 +9,7 @@ callouts are left as LaTeX rather than converted to markdown.
 Conversions performed (in order — more-specific patterns first):
 
 1. Superscript inside a LaTeX math citation:
-       $(\mathrm{G}, 684 .)^{3}$   →   (G, 684.)[^3]
+       $(\\mathrm{G}, 684 .)^{3}$   →   (G, 684.)[^3]
    (any $...$ expression that ends with ^{N}$)
 
 2. Bare LaTeX superscript:

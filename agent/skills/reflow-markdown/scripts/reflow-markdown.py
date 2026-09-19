@@ -37,12 +37,27 @@ rejoined and normalised when their paragraph is reflowed.
 Usage:
     python3 reflow-markdown.py <file.md> [--width N]
 
-Edits the file in place (backup saved as <file>.bak). Default width: 100.
+Edits the file in place. Default width: 100.
+Backup: saved as <file>.bak — but an EXISTING <file>.bak is never
+overwritten; when one is present the backup is written to <file>.bak.1,
+.bak.2, ... (highest free number).
 """
 
 import re
 import argparse
+import os
 import shutil
+
+
+def _backup_path(path: str) -> str:
+    """<file>.bak if free, else <file>.bak.1, .bak.2, ... — never clobber."""
+    bak = path + '.bak'
+    if not os.path.exists(bak):
+        return bak
+    i = 1
+    while os.path.exists(f'{bak}.{i}'):
+        i += 1
+    return f'{bak}.{i}'
 
 ATOMIC = re.compile(
     r'(?<!\\)\$(?=\S)[^$\n]+?(?<=\S)\$'  # inline math (LaTeX/GitHub rule:
@@ -363,7 +378,7 @@ def reflow(path, width=100):
             print(f"No changes needed ({len(out)} lines; none over {width}).")
         return
 
-    shutil.copy2(path, path + '.bak')
+    shutil.copy2(path, _backup_path(path))
     with open(path, 'w', encoding='utf-8') as f:
         f.write(result)
 

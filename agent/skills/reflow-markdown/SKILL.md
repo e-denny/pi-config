@@ -63,8 +63,10 @@ If the user specified a maximum character width (e.g. "80 characters", "max
 python3 ./scripts/reflow-markdown.py <file> [--width N]
 ```
 
-The script edits the file in place and saves a `<file>.bak` backup alongside
-it.
+The script edits the file in place and saves a backup alongside it:
+`<file>.bak` — unless a `<file>.bak` already exists, in which case existing
+backups are never overwritten and the backup is written to `<file>.bak.1`,
+`.bak.2`, ... (highest free number).
 
 ## Step 3: Verify (wiki use case)
 
@@ -87,4 +89,5 @@ Tell the user:
 - The line count before and after
 - The counts the script printed (over-width lines, split into exempt vs.
   unbreakable-token)
-- That a backup was saved as `<file>.bak`
+- That a backup was saved (as `<file>.bak`, or `<file>.bak.N` when a
+  `<file>.bak` already existed — existing backups are never overwritten)

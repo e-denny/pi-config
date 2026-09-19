@@ -1,0 +1,181 @@
+{
+  "category_counts": {
+    "assistant_shape": 1,
+    "chatbot_scaffold": 1,
+    "copula_avoidance": 4,
+    "copula_density": 2,
+    "dash_style": 22,
+    "doubled_word": 1,
+    "filler": 10,
+    "hedging": 2,
+    "jargon": 5,
+    "list_uniformity": 4,
+    "mechanics": 4,
+    "ngram_repetition": 34,
+    "nominalization": 4,
+    "over_correction": 1,
+    "parallel_structure": 10,
+    "passive_voice": 1,
+    "redundancy": 5,
+    "rule_of_three": 9,
+    "sentence_shape": 4,
+    "soft_filler": 7,
+    "svo_monotony": 1,
+    "uniform_openers": 3,
+    "wh_opener": 1
+  },
+  "flagged_at_5": 15,
+  "mean_score": 7.12,
+  "median_score": 8.0,
+  "modules": 24,
+  "python": "3.14",
+  "rows": [
+    {
+      "module": "argparse",
+      "score": 15.3,
+      "verdict": "strong-tell",
+      "words": 1101
+    },
+    {
+      "module": "decimal",
+      "score": 14.3,
+      "verdict": "watch",
+      "words": 374
+    },
+    {
+      "module": "random",
+      "score": 13.3,
+      "verdict": "watch",
+      "words": 813
+    },
+    {
+      "module": "functools",
+      "score": 12.6,
+      "verdict": "watch",
+      "words": 473
+    },
+    {
+      "module": "subprocess",
+      "score": 11.3,
+      "verdict": "watch",
+      "words": 1238
+    },
+    {
+      "module": "dataclasses",
+      "score": 11.0,
+      "verdict": "watch",
+      "words": 545
+    },
+    {
+      "module": "ssl",
+      "score": 10.4,
+      "verdict": "watch",
+      "words": 794
+    },
+    {
+      "module": "tempfile",
+      "score": 10.2,
+      "verdict": "watch",
+      "words": 842
+    },
+    {
+      "module": "json",
+      "score": 10.0,
+      "verdict": "watch",
+      "words": 1201
+    },
+    {
+      "module": "csv",
+      "score": 8.6,
+      "verdict": "watch",
+      "words": 562
+    },
+    {
+      "module": "re",
+      "score": 8.2,
+      "verdict": "watch",
+      "words": 1138
+    },
+    {
+      "module": "hashlib",
+      "score": 8.0,
+      "verdict": "watch",
+      "words": 372
+    },
+    {
+      "module": "shutil",
+      "score": 8.0,
+      "verdict": "watch",
+      "words": 1496
+    },
+    {
+      "module": "statistics",
+      "score": 6.7,
+      "verdict": "watch",
+      "words": 2913
+    },
+    {
+      "module": "asyncio",
+      "score": 5.9,
+      "verdict": "watch",
+      "words": 2857
+    },
+    {
+      "module": "collections",
+      "score": 3.9,
+      "verdict": "clean",
+      "words": 520
+    },
+    {
+      "module": "logging",
+      "score": 2.5,
+      "verdict": "clean",
+      "words": 1356
+    },
+    {
+      "module": "unittest",
+      "score": 2.3,
+      "verdict": "clean",
+      "words": 645
+    },
+    {
+      "module": "socket",
+      "score": 2.1,
+      "verdict": "clean",
+      "words": 1426
+    },
+    {
+      "module": "typing",
+      "score": 2.1,
+      "verdict": "clean",
+      "words": 3580
+    },
+    {
+      "module": "difflib",
+      "score": 1.8,
+      "verdict": "clean",
+      "words": 1901
+    },
+    {
+      "module": "textwrap",
+      "score": 1.6,
+      "verdict": "clean",
+      "words": 621
+    },
+    {
+      "module": "itertools",
+      "score": 0.8,
+      "verdict": "clean",
+      "words": 623
+    },
+    {
+      "module": "sqlite3",
+      "score": 0.0,
+      "verdict": "clean",
+      "words": 221
+    }
+  ],
+  "top_category": "ngram_repetition",
+  "top_category_share": 0.25,
+  "worst_score": 15.3
+}

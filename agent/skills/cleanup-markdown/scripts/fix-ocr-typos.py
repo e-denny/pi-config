@@ -26,8 +26,20 @@ a .bak copy is written before any changes.
 """
 
 import json
+import os
 import sys
 import shutil
+
+
+def _backup_path(path: str) -> str:
+    """<file>.bak if free, else <file>.bak.1, .bak.2, ... — never clobber."""
+    bak = path + '.bak'
+    if not os.path.exists(bak):
+        return bak
+    i = 1
+    while os.path.exists(f'{bak}.{i}'):
+        i += 1
+    return f'{bak}.{i}'
 
 
 def load_replacements(source: str) -> list[dict]:
@@ -55,7 +67,8 @@ def apply_replacements(path: str, replacements: list[dict]) -> None:
         print('No changes made (none of the "from" strings were found).')
         return
 
-    shutil.copy2(path, path + '.bak')
+    bak = _backup_path(path)
+    shutil.copy2(path, bak)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(content)
 

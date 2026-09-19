@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Entry point for the stylometry skill. Bootstraps the environment on first use,
+# then runs the report generator with its own interpreter.
+#
+#   stylometry-report TEXT [-o REPORT.md] [--title T] [--author A] [--year Y]
+#                          [--genre G] [--chunk-size N] [--sections LIST]
+#                          [--json FILE] [--list-sections]
+#
+# Override the venv location with PYSTYLOMETRY_VENV=/some/path.
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+VENV="${PYSTYLOMETRY_VENV:-$HOME/.local/share/pystylometry/venv}"
+
+if [ ! -x "$VENV/bin/python" ]; then
+  "$HERE/setup_env.sh"
+fi
+
+exec "$VENV/bin/python" "$HERE/stylometry_report.py" "$@"

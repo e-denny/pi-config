@@ -1,0 +1,481 @@
+diff --git a/.github/workflows/test.yml b/.github/workflows/test.yml
+index 4e8782f..06de384 100644
+--- a/.github/workflows/test.yml
++++ b/.github/workflows/test.yml
+@@ -63,7 +63,7 @@ jobs:
+       - name: Install dev tooling
+         run: pip install ruff mypy pytest
+       - name: Ruff (lint)
+-        run: ruff check skills/human-voice/scripts/human_voice_linter skills/human-voice/scripts/human_voice_llm install.py eval tests
++        run: ruff check skills/human-voice/scripts/human_voice_linter skills/human-voice/scripts/human_voice_llm skills/human-voice/scripts/check_invariants.py install.py eval tests
+       - name: Mypy (type-check the package + eval/lib.py)
+         run: mypy
+       - name: Pytest (eval unit tests + stress wrapper)
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+index 9dcc776..5288e3f 100644
+--- a/CHANGELOG.md
++++ b/CHANGELOG.md
+@@ -4,6 +4,30 @@ All notable changes to the human-voice skill and its linter are recorded here.
+ The format follows [Keep a Changelog](https://keepachangelog.com/); versions
+ track `.claude-plugin/plugin.json`.
+ 
++## [Unreleased]
++
++### pi
++
++The installer knows the pi coding agent now, as `python3 install.py pi`. pi reads
++the shared `.agents/skills/` folder, so the fewest-directory rule covers it
++there; `--exact` writes to pi's own `~/.pi/agent/skills/` or a project's
++`.pi/skills/` instead. SKILL.md names pi in its compatibility line and its
++Workflow section, and adds pi's own invocation, `/skill:human-voice`. pi has no
++built-in MCP client, so the skill takes its script branch there instead of
++waiting on the `lint_prose` and `check_invariants` tools.
++
++### The invariant diff from the command line
++
++`scripts/check_invariants.py` gives shell-based agents the fact check that only
++the MCP tool and `humanize.py`'s loop could run before. It compares a rewrite
++against its original and lists the numbers, links, inline code, fenced code and
++citations that went missing, plus the numbers, links and citations that appeared
++from nowhere. It exits 1 while either list is non-empty, so it works as a gate.
++`--context` marks author material as sourced, which the MCP tool never exposed,
++and `--json` and `--quiet` cover CI and agent use. Step 9 of SKILL.md points at
++it, and the Workflow's tool-fallback section now maps every MCP tool to its
++script.
++
+ ## [0.9.0]
+ 
+ ### Docs you can start from
+diff --git a/CONTRIBUTING.md b/CONTRIBUTING.md
+index aac25cf..26faa69 100644
+--- a/CONTRIBUTING.md
++++ b/CONTRIBUTING.md
+@@ -15,7 +15,7 @@ validation), `directives` (inline ignore comments), `cli`, and `api`.
+ The **model-agnostic layer** sits beside the linter in `scripts/human_voice_llm/`:
+ `providers` (one `chat()` call, every provider, four wire formats), `prompt`
+ (compiles SKILL.md for a model with no tools), `invariants` (the fact-preservation
+-diff), `loop` (lint, rewrite, check, feed back), `cli` (`humanize.py`) and
++diff, with `check_invariants.py` as its shim), `loop` (lint, rewrite, check, feed back), `cli` (`humanize.py`) and
+ `mcp_server`. Also stdlib-only. `install.py` at the repo root knows where each
+ coding agent loads skills from.
+ 
+diff --git a/Makefile b/Makefile
+index f577fd8..e999eeb 100644
+--- a/Makefile
++++ b/Makefile
+@@ -133,7 +133,7 @@ prompt:
+ # Dev-only tooling (needs `pip install ruff mypy pytest`). Never required at
+ # runtime — the linter and eval run on the standard library alone.
+ quality:
+-	ruff check skills/human-voice/scripts/human_voice_linter skills/human-voice/scripts/human_voice_llm install.py eval tests
++	ruff check skills/human-voice/scripts/human_voice_linter skills/human-voice/scripts/human_voice_llm skills/human-voice/scripts/check_invariants.py install.py eval tests
+ 	mypy
+ 	pytest -q
+ 
+diff --git a/README.md b/README.md
+index 138c98a..13ecc29 100644
+--- a/README.md
++++ b/README.md
+@@ -33,7 +33,7 @@ fact. When a draft needs a specific it doesn't have, you get `[SOURCE NEEDED]`,
+ never an invented one.
+ 
+ It runs where you already work: Claude Code, Codex, Cursor, Copilot, Gemini CLI
+-and four more agents, or any major model through a plain API key.
++and five more agents, or any major model through a plain API key.
+ 
+ ## See it work
+ 
+diff --git a/docs/install.md b/docs/install.md
+index ecf1c41..5fdb9c8 100644
+--- a/docs/install.md
++++ b/docs/install.md
+@@ -34,7 +34,7 @@ python3 install.py --link              # symlink instead of copy; `git pull` upd
+ 
+ | Agent | User scope | Project scope |
+ |---|---|---|
+-| Codex, Gemini CLI, Cursor, Copilot, opencode | `~/.agents/skills/` | `.agents/skills/` |
++| Codex, Gemini CLI, Cursor, Copilot, opencode, pi | `~/.agents/skills/` | `.agents/skills/` |
+ | Claude Code (also read by Cursor, Copilot, opencode) | `~/.claude/skills/` | `.claude/skills/` |
+ | Windsurf | `~/.codeium/windsurf/skills/` | `.windsurf/skills/` |
+ | Cline | `~/.cline/skills/` | `.cline/skills/` |
+@@ -57,6 +57,14 @@ skill and the MCP server:
+ gemini extensions install https://github.com/stephenoffer/human-voice
+ ```
+ 
++**pi** reads the shared `.agents/skills/` folder, so `python3 install.py pi`
++lands there. pi also reads its own `~/.pi/agent/skills/` and a project's
++`.pi/skills/`, which is where `--exact` puts it. Load it with
++`/skill:human-voice <file or brief>`, or describe the draft and let the skill's
++description pull it in. pi has no built-in MCP client, so the linter scripts
++under `scripts/` are the measurement path there; the skill says so and skips the
++MCP fallback rather than waiting on tools that do not exist.
++
+ ## Any model through its API
+ 
+ `humanize.py` runs the skill's procedure when there's no agent to run it. It
+@@ -140,6 +148,13 @@ gives it measurements it can't make by reading.
+ | `verify_detector` | asks GPTZero, Originality, Sapling or Winston, if a key is set |
+ | `humanize` | hands the whole loop to a second model through the provider layer |
+ 
++Every one of those tools also exists as a script, so a harness with no MCP client
++gets the same measurements: `scripts/detect_ai_prose.py` for `lint_prose`,
++`scripts/check_invariants.py` for `check_invariants`,
++`scripts/verify_detector.py` for `verify_detector`, and `scripts/humanize.py`
++for `humanize`. The invariant script exits 1 while anything is missing or
++introduced, so it works as a CI gate on a rewrite.
++
+ The installer prints the exact config for your client:
+ 
+ ```bash
+diff --git a/install.py b/install.py
+index 18587f7..d4738bf 100755
+--- a/install.py
++++ b/install.py
+@@ -48,7 +48,9 @@ AGENTS = {
+               "detect": "~/.cline"},
+     "opencode": {"label": "opencode", "user": "~/.config/opencode/skills",
+                  "project": ".opencode/skills", "detect": "~/.config/opencode"},
+-    "agents": {"label": "Shared .agents/skills (read by Codex, Gemini CLI, Cursor, Copilot, opencode)",
++    "pi": {"label": "pi coding agent", "user": "~/.pi/agent/skills", "project": ".pi/skills",
++           "detect": "~/.pi"},
++    "agents": {"label": "Shared .agents/skills (read by Codex, Gemini CLI, Cursor, Copilot, opencode, pi)",
+                "user": "~/.agents/skills", "project": ".agents/skills", "detect": None},
+     "aider": {"label": "Aider (no skills: a conventions file loaded with --read)",
+               "rules": "CONVENTIONS.human-voice.md", "detect": "~/.aider.conf.yml"},
+@@ -58,7 +60,7 @@ AGENTS = {
+ # shared directory beats one copy per agent: several agents read more than one of
+ # these, and two copies of a skill load as two skills.
+ SHARED = (
+-    ("agents", {"agents", "codex", "gemini", "cursor", "copilot", "opencode"}),
++    ("agents", {"agents", "codex", "gemini", "cursor", "copilot", "opencode", "pi"}),
+     ("claude", {"claude", "cursor", "copilot", "opencode"}),
+ )
+ 
+@@ -223,9 +225,9 @@ def main(argv=None):
+             _say("  %-9s serves: %s" % (target, ", ".join(served)))
+         results.append(install_skill(target, args.project, args.force, args.link, args.dry_run))
+     _say("")
+-    _say("Invoke it as /human-voice where the agent supports slash commands, or just ask to "
+-         "\"humanize\" a draft. For the linter as tools in any MCP client: "
+-         "python3 install.py --mcp <client>.")
++    _say("Invoke it as /human-voice where the agent supports slash commands (pi: "
++         "/skill:human-voice), or just ask to \"humanize\" a draft. For the linter as tools in any "
++         "MCP client: python3 install.py --mcp <client>.")
+     return 0 if all(results) else 1
+ 
+ 
+diff --git a/skills/human-voice/SKILL.md b/skills/human-voice/SKILL.md
+index 12663b8..17e14b7 100644
+--- a/skills/human-voice/SKILL.md
++++ b/skills/human-voice/SKILL.md
+@@ -2,7 +2,7 @@
+ name: human-voice
+ description: Use when generating or rewriting reports, documentation, or any prose so it does not read as AI-written. Removes hedging, em-dash overuse, filler ("delve", "leverage", "seamless"), rule-of-three padding, bold-bullet listicles, meta-commentary, sycophancy, and vacuity, without altering facts, numbers, code, or citations. Accepts a file path or pasted text. Trigger when prose "sounds like AI" or "sounds like ChatGPT", when humanizing or de-slopping a draft, when a report, email, README or landing page reads robotic, or when drafting copy that should read human from the start. Not for translation, summarization, or grammar-only fixes.
+ license: MIT
+-compatibility: Model-agnostic Agent Skill. Works in any agent that loads SKILL.md (Claude Code, Codex, Gemini CLI, Cursor, GitHub Copilot, Windsurf, Cline, opencode). The optional linter needs Python 3.8+ and no packages or network.
++compatibility: Model-agnostic Agent Skill. Works in any agent that loads SKILL.md (Claude Code, Codex, Gemini CLI, Cursor, GitHub Copilot, Windsurf, Cline, opencode, pi). The optional linter needs Python 3.8+ and no packages or network.
+ metadata:
+   argument-hint: "<file-path | pasted-text> [fix|generate] [register: technical|business|marketing|academic|casual|creative]"
+   version: "0.9.0"
+@@ -197,8 +197,10 @@ switch them off.
+ 
+ ## Modes
+ 
+-Parse the invocation arguments (`$ARGUMENTS` where the agent substitutes it,
+-otherwise the user's message) for a mode token and an optional `register:` token. Parsing is
++Parse the invocation arguments for a mode token and an optional `register:`
++token. Where the harness substitutes `$ARGUMENTS` (Claude Code, Gemini CLI), that
++string is the arguments; in pi the text after `/skill:human-voice` arrives as a
++`User:` line appended to this file; otherwise read the user's message. Parsing is
+ order-independent and case-insensitive: accept `fix`/`generate` in any position,
+ `register: marketing`, `register=marketing`, or a bare register name; treat
+ anything that resolves to an existing path as the input file, not a mode.
+@@ -872,8 +874,9 @@ the rest of the shape stays. You relax the single rule in the way, not the skill
+ 6. **A change that is hard to undo.** Editing a file in place, touching what git
+    does not track, rewriting a doc someone else owns. Confirm first, or leave a
+    `.bak`. Recoverability outranks finishing in one turn.
+-7. **The harness outranks the skill.** A system prompt, a project CLAUDE.md, AGENTS.md or GEMINI.md, a rules file, or a
+-   style guide the repo enforces beats this file wherever they collide. Same
++7. **The harness outranks the skill.** A system prompt, a project CLAUDE.md,
++   AGENTS.md (pi and Codex read it), GEMINI.md, a rules file, or a style guide
++   the repo enforces beats this file wherever they collide. Same
+    principle as 1: the constraint wins, the shape stays.
+ 
+ None of these licenses a quiet return to the default voice. Each scopes one rule,
+@@ -888,6 +891,21 @@ the tools fall back in the same order: run the script if you have a shell and
+ Python 3; otherwise call the `lint_prose`, `check_invariants` and
+ `verify_detector` tools if the human-voice MCP server is connected; otherwise use
+ the no-tool checklist in step 3 and say in the audit that the linter did not run.
++Each MCP tool has a script here with the same measurements, so a shell is all you
++need: `detect_ai_prose.py` for `lint_prose`, `check_invariants.py` for
++`check_invariants`, `verify_detector.py` for `verify_detector`, and `humanize.py`
++for `humanize`.
++
++**In pi**, take the first branch. `bash` runs and `python3` is on the path, so
++call the scripts by their path under this skill's own directory (for example
++`~/.pi/agent/skills/human-voice/scripts/detect_ai_prose.py`). pi has no built-in
++MCP client, so the `lint_prose` and `check_invariants` tools never exist there:
++skip that branch rather than waiting on it, and do not report those tools as
++missing once a script has run. `read`, `edit` and `write` handle the file, and
++`bash` runs `scripts/check_invariants.py` (or `git diff`) for the invariant
++check. Load the whole skill with
++`/skill:human-voice <file or brief>`, which appends your text to this file as a
++`User:` line; the description alone also loads it when the request matches.
+ 
+ 1. **Resolve input.** File-path vs pasted-text vs brief; pick `fix` or
+    `generate`; infer `register`. Set the depth here too (Pick the depth of the
+@@ -990,8 +1008,20 @@ the no-tool checklist in step 3 and say in the audit that the linter did not run
+ 8. **Apply / present.** For a file, ensure it is recoverable (git-tracked or
+    `.bak`d), show the rewrite or diff, then edit in place; for pasted text, print
+    the rewrite. Always print the Humanization Audit.
+-9. **Confirm invariants** with a diff (`git diff`, or a before/after of numbers,
+-   code, links).
++9. **Confirm invariants.** The deterministic check is a script, so run it rather
++   than eyeballing a diff:
++   ```bash
++   python3 scripts/check_invariants.py <original> <rewrite>
++   python3 scripts/check_invariants.py --context <notes> <original> <rewrite>
++   python3 scripts/check_invariants.py --json <original> <rewrite>
++   ```
++   It exits **1 while anything is missing or introduced**, which makes it a gate
++   rather than advice: restore the missing span verbatim, or remove the addition,
++   or mark it `[SOURCE NEEDED]`. `--context` marks author material as sourced, so
++   specifics the rewrite was entitled to use are not reported as invented. It
++   covers numbers, code, links and citations only: defined terms, PII and claim
++   drift stay your read. With no shell, fall back to a manual diff (`git diff`, or
++   a before/after of numbers, code, links).
+ 10. **Pre-return check** (below) on the response itself, then send.
+ 
+ ## Pre-return check
+diff --git a/skills/human-voice/scripts/check_invariants.py b/skills/human-voice/scripts/check_invariants.py
+new file mode 100755
+index 0000000..63ea4a5
+--- /dev/null
++++ b/skills/human-voice/scripts/check_invariants.py
+@@ -0,0 +1,120 @@
++#!/usr/bin/env python3
++"""Invariant diff: did the rewrite keep every fact it was handed?
++
++The linter scores style and the detector gate scores machine-ness. Neither looks
++at whether the numbers survived. This does: it compares a rewrite against its
++original and lists the invariants that went missing and the numbers, links and
++citations that appeared out of nowhere, which is the shape fabrication takes.
++
++    python3 check_invariants.py draft.md rewrite.md
++    python3 check_invariants.py --context notes.md draft.md rewrite.md
++    python3 check_invariants.py draft.md -            # rewrite from stdin
++    cat rewrite.md | python3 check_invariants.py - rewrite.md
++    python3 check_invariants.py --json draft.md rewrite.md
++    python3 check_invariants.py --quiet draft.md rewrite.md
++
++Exit: 0 when every invariant survived, 1 when something was lost or introduced,
++2 for a usage or read error. Exit 1 is a gate, not a suggestion: restore the
++missing span verbatim, or remove the addition, or mark it [SOURCE NEEDED].
++
++Pass `--context` for author material the rewrite was allowed to draw on. Anything
++present there counts as sourced rather than invented, so a rewrite that folds real
++specifics into the prose does not get reported as fabricating them.
++
++This is a floor like the linter. It compares tokens, not claims: "rose 12%" and
++"fell 12%" look identical to it, so claim drift, defined terms and PII stay your
++read. It exists so a script-based agent gets the same deterministic check the MCP
++tool and humanize.py's loop already had.
++"""
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import sys
++
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
++from human_voice_llm import invariants  # noqa: E402
++
++EXIT_OK = 0
++EXIT_CHANGED = 1
++EXIT_ERROR = 2
++
++KIND_LABEL = {
++    "code_blocks": "fenced code blocks",
++    "inline_code": "inline code",
++    "links": "links",
++    "numbers": "numbers",
++    "citations": "citations",
++}
++
++
++def read_target(target):
++    if target != "-":
++        with open(target, encoding="utf-8") as fh:
++            return fh.read()
++    return sys.stdin.read()
++
++
++def render(result, limit):
++    lines = ["invariants: %s" % ("ok" if result["ok"] else "CHANGED")]
++    if result["ok"]:
++        lines.append("  nothing lost, nothing introduced")
++    else:
++        for line in invariants.summarize(result, limit=limit):
++            lines.append("  %s" % line)
++    if result["placeholders"]:
++        shown = ", ".join(repr(p) for p in result["placeholders"][:limit])
++        more = (" (+%d more)" % (len(result["placeholders"]) - limit)
++                if len(result["placeholders"]) > limit else "")
++        lines.append("  left for the author, placeholders: %s%s" % (shown, more))
++    lines.append("  token-level check only: claim drift, defined terms and PII are yours to read")
++    return "\n".join(lines)
++
++
++def main(argv=None):
++    ap = argparse.ArgumentParser(
++        description=__doc__.splitlines()[0],
++        epilog="Exit: 0 every invariant survived, 1 something lost or introduced, "
++               "2 usage or read error.")
++    ap.add_argument("original", help="the source the rewrite came from, or - for stdin")
++    ap.add_argument("rewrite", help="the rewrite, or - for stdin (one of the two only)")
++    ap.add_argument("--context", action="append", metavar="FILE",
++                    help="author material the rewrite could draw on (repeatable); "
++                         "anything here counts as sourced, not invented")
++    ap.add_argument("--json", action="store_true", help="machine-readable output")
++    ap.add_argument("--quiet", action="store_true", help="print only the status line")
++    ap.add_argument("--max-items", type=int, default=12, dest="max_items",
++                    help="items listed per kind (default %(default)s)")
++    args = ap.parse_args(argv)
++
++    if args.original == "-" and args.rewrite == "-":
++        ap.error("only one of original and rewrite can read from stdin")
++
++    try:
++        original = read_target(args.original)
++        rewrite = read_target(args.rewrite)
++        context = "\n\n".join(read_target(path) for path in args.context or [])
++    except OSError as exc:
++        print("cannot read %s: %s" % (exc.filename, exc.strerror), file=sys.stderr)
++        return EXIT_ERROR
++
++    result = invariants.compare(original, rewrite, context or None)
++
++    if args.json:
++        json.dump(dict(result, status="ok" if result["ok"] else "changed"), sys.stdout, indent=2)
++        print()
++    elif args.quiet:
++        print("invariants: %s" % ("ok" if result["ok"] else "CHANGED"))
++    else:
++        print(render(result, args.max_items))
++        if not result["ok"]:
++            print("  restore missing spans verbatim; remove additions, or mark them [SOURCE NEEDED]")
++    return EXIT_OK if result["ok"] else EXIT_CHANGED
++
++
++if __name__ == "__main__":
++    try:
++        sys.exit(main())
++    except BrokenPipeError:
++        os._exit(0)
+diff --git a/tests/test_llm.py b/tests/test_llm.py
+index 8af671f..b938dca 100644
+--- a/tests/test_llm.py
++++ b/tests/test_llm.py
+@@ -21,6 +21,7 @@ SCRIPTS = os.path.join(SKILL, "scripts")
+ sys.path.insert(0, SCRIPTS)
+ sys.path.insert(0, ROOT)
+ 
++import check_invariants  # noqa: E402
+ from human_voice_llm import invariants, mcp_server, prompt, providers  # noqa: E402
+ from human_voice_llm.loop import humanize  # noqa: E402
+ 
+@@ -294,6 +295,70 @@ class InvariantTest(unittest.TestCase):
+         self.assertEqual(r["placeholders"], ["[SOURCE NEEDED]"])
+ 
+ 
++class InvariantCliTest(unittest.TestCase):
++    """check_invariants.py is what a shell-based agent runs when no MCP client exists."""
++
++    SRC = "p99 dropped from 340 ms to 120 ms. See https://example.com/runbook [3]."
++
++    def run_cli(self, argv):
++        buf = io.StringIO()
++        old, sys.stdout = sys.stdout, buf
++        try:
++            rc = check_invariants.main(argv)
++        finally:
++            sys.stdout = old
++        return rc, buf.getvalue()
++
++    def write(self, d, name, text):
++        path = os.path.join(d, name)
++        with open(path, "w", encoding="utf-8") as fh:
++            fh.write(text)
++        return path
++
++    def test_clean_pair_exits_zero(self):
++        with tempfile.TemporaryDirectory() as d:
++            rc, text = self.run_cli([self.write(d, "a.md", self.SRC),
++                                     self.write(d, "b.md", self.SRC)])
++        self.assertEqual(rc, 0)
++        self.assertIn("invariants: ok", text)
++
++    def test_lost_and_invented_exit_one(self):
++        bad = "Latency fell sharply, by 64%. See the runbook and [3]."
++        with tempfile.TemporaryDirectory() as d:
++            rc, text = self.run_cli([self.write(d, "a.md", self.SRC),
++                                     self.write(d, "b.md", bad)])
++        self.assertEqual(rc, 1)
++        self.assertIn("MISSING from the rewrite", text)
++        self.assertIn("INTRODUCED by the rewrite", text)
++        self.assertIn("restore missing spans verbatim", text)
++
++    def test_context_marks_added_numbers_as_sourced(self):
++        src = "Latency improved after the change."
++        out = "Latency fell from 340 ms to 120 ms after the change."
++        with tempfile.TemporaryDirectory() as d:
++            args = [self.write(d, "a.md", src), self.write(d, "b.md", out)]
++            changed, _ = self.run_cli(args)
++            sourced, text = self.run_cli(args[:1] + ["--context",
++                                                     self.write(d, "c.md", "p99 340 ms, now 120 ms")]
++                                        + args[1:])
++        self.assertEqual(changed, 1)
++        self.assertEqual(sourced, 0)
++        self.assertIn("invariants: ok", text)
++
++    def test_quiet_and_json_and_errors(self):
++        with tempfile.TemporaryDirectory() as d:
++            good = self.write(d, "a.md", self.SRC)
++            rc, text = self.run_cli(["--quiet", good, good])
++            self.assertEqual((rc, text.strip()), (0, "invariants: ok"))
++            rc, text = self.run_cli(["--json", good, good])
++            self.assertEqual(rc, 0)
++            self.assertEqual(json.loads(text)["status"], "ok")
++            rc, _ = self.run_cli([os.path.join(d, "missing.md"), good])
++            self.assertEqual(rc, 2)
++        with self.assertRaises(SystemExit):
++            check_invariants.main(["-", "-"])
++
++
+ class LoopTest(unittest.TestCase):
+     def setUp(self):
+         self.before = _read("modern-ai-before.md")
+@@ -425,6 +490,22 @@ class InstallerTest(unittest.TestCase):
+             with open(os.path.join(d, "CONVENTIONS.human-voice.md"), encoding="utf-8") as fh:
+                 self.assertIn("Running as a system prompt", fh.read())
+ 
++    def test_installs_for_pi(self):
++        # pi reads the shared .agents/skills folder, so the fewest-directory rule
++        # covers it there; --exact writes to pi's own ~/.pi/agent/skills instead.
++        self.assertEqual(install.plan(["pi"]), [("agents", ["pi"])])
++        self.assertEqual(install.plan(["pi"], exact=True), [("pi", ["pi"])])
++        with tempfile.TemporaryDirectory() as d:
++            buf = io.StringIO()
++            old, sys.stdout = sys.stdout, buf
++            try:
++                rc = install.main(["pi", "--exact", "--project", d])
++            finally:
++                sys.stdout = old
++            self.assertEqual(rc, 0)
++            self.assertTrue(os.path.isfile(os.path.join(
++                d, ".pi/skills/human-voice/SKILL.md")))
++
+     def test_mcp_configs_parse(self):
+         for client in install.MCP_CLIENTS:
+             text = install.mcp_config(client)
