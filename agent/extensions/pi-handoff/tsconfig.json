@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"allowImportingTsExtensions": true,
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"noEmit": true,
+		"skipLibCheck": true,
+		"strict": true,
+		"target": "ES2022",
+		"lib": ["ES2023"],
+		"typeRoots": [
+			"/home/edgar/.local/lib/node_modules/@earendil-works/pi-coding-agent/node_modules/@types"
+		],
+		"paths": {
+			"@earendil-works/pi-coding-agent": [
+				"/home/edgar/.local/lib/node_modules/@earendil-works/pi-coding-agent/dist/index.d.ts"
+			]
+		}
+	},
+	"include": ["*.ts"]
+}
