@@ -1,0 +1,460 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+## [2.12.4] - 2026-09-27
+
+Humanizer source and Vale refresh, patch release.
+
+- **humanizer 1.7.2:** absorb rendered-surface line-break guidance and extend the fabricated-speaker guardrail to drafting in another person's voice. Add staged-discovery variants and narrow literal-use carve-outs to the performed-insight catalog.
+- **ai-writing-detector 1.1.6 -> 1.1.7:** update `patterns.js` to avoid-ai-writing tip `2a7e999`. Quoted spans and single-line quote blocks are masked; staged-discovery variants are covered. `validate.js` is unchanged.
+- **writing-prose 1.2.0 -> 1.2.1:** update Vale to `v3.23.0`, sync Microsoft styles, and verify Windows and WSL binaries. House config unchanged.
+- Package version: `2.12.3` -> `2.12.4`.
+
+## [2.12.3] - 2026-09-25
+
+Live-install delta merge: editorial work that had reached the installed skills
+but never landed here is now in the monorepo, and the humanizer
+editing-contract work from 2.12.2 is back on the installed copies. Ingest-only
+release, patch.
+
+- **humanizer 1.7.1 -> 1.7.2:** five editing-procedure rules (prefer no-op to an
+  uncertain edit; do not pad back to length after cutting puffery; treat your own
+  in-thread draft as foreign text; after a preservation FAIL repair only the
+  blocking spans; match quote and apostrophe family on edited spans), nine
+  guardrail bullets (dated slang, historical voice, low-variance and
+  neurodivergent cadence, force-bearing quantifier preservation, deletion and
+  reversion tests, promotional drift, overloaded-domain "proof", staging-tell
+  thresholds, same-genre voice samples), the fiction carve-out for invented
+  detail, and a Voice-match hypothesis step in the invented-specifics test.
+- **humanizer references:** `pattern-catalog.md` gains **Absorbed tells 100-106**
+  (vague association, empty concession sandwich, significance-adverb density,
+  parallel reason chains, intensifier/diminisher opposition, participial
+  reframe, hedged-enumeration openers) plus the attributive-only hyphen rule on
+  pattern 78; `required-checks.md` gains the ordinal and simultaneity verify,
+  the sentence-adds-a-fact test, and quote-family matching; `humanizing-text.md`
+  routes fiction detail to the new prose reference and drops a contrast tail.
+- **simple-english 2.4.0 -> 2.4.1:** a heading must carry three sentences of
+  body; define a concept in at most ten words at first use; vertical lists only
+  for three or more parallel items; spell out a technical noun over three words
+  once; strict extras for `follow`, `above`/`below`, `help`, unsure possessives,
+  `but`/`because`, `do`/`prevent`/`do again`, named targets, and phrasal verbs.
+- **writing-prose 1.1.4 -> 1.2.0:** new `references/narrative-architecture.md`
+  (plot, theme, time, and cast tells; architecture before surface style) and
+  `references/scientific-register.md` (scholarly voice, venue sampling,
+  tech-article openings). SKILL.md routes fiction and paper prose to them and
+  samples recent artifacts from the target venue.
+- SOURCES drift fixed: `ai_writing_detector_skill_version` and the packaged
+  table now match the shipped **1.1.6**; README skill table refreshed from
+  1.6.0/2.4.0/1.1.1/1.1.2 to 1.7.2/2.4.1/1.1.6/1.2.0.
+- `tests/test_voice_contracts.py`: the version-alignment check read hardcoded
+  1.2.0/2.4.0/1.1.0/package 2.4.0 values and had been failing since long before
+  this release. It now derives each skill version from the skill's own
+  frontmatter and asserts README, SOURCES, and CHANGELOG agree, so the guard
+  cannot go stale again.
+- Merge method: files where the installed copy was a strict superset were taken
+  whole; `humanizer/SKILL.md` was hand-merged because both sides carried unique
+  rules. The installed Vale `accept.txt` keeps its local addition and stays out
+  of the public package.
+
+## [2.12.2] - 2026-09-25
+
+Humanizer editing-contract clarification absorbed from avoid-ai-writing v3.36.0.
+
+- Separate candidate matches, justified findings, and authorized edits. Routine
+  cleanup preserves structure and argument; broad restructuring needs clear
+  scope. Ground factual changes in source material and preserve attribution,
+  quantities, conditions, causality, and uncertainty. Protect quotes, tables,
+  code, identifiers, and frontmatter. Leave clean input unchanged and report
+  protected or source-blocked findings instead of forcing edits.
+- Define a shared two-pass ceiling for corrective edits and preservation repair,
+  with explicit pass accounting and stop reasons.
+
+## [2.12.1] - 2026-09-23
+
+avoid-ai-writing tip absorb (`3514947`, untagged, post-`7a2c7d1`).
+
+- **ai-writing-detector 1.1.5 -> 1.1.6:** engine absorb to upstream tip
+  `3514947`. Preservation validator no longer opens a fence on a backtick line
+  whose info string contains a backtick (upstream #330): a prose line like
+  `` ```npm test``` `` previously opened an unterminated fence, so every later
+  prose edit reported `code-block-modified`. Vendored `fence-probe.js` gains a
+  permanent probe for the fix; smoke is 16/16. `patterns.js` comment-only
+  refresh (stylometric TODO accounting, corpus calibration notes, #335).
+  Humanizer editorial unaffected; upstream CLI `--context` fix (#327) is not
+  vendored machinery here. Pin fields in SOURCES.md refreshed, monorepo patch.
+
+## [2.12.0] - 2026-09-19
+
+avoid-ai-writing tip absorb (`7a2c7d1`, untagged, post-v3.35.0) plus vale 3.22.0
+release ingest.
+
+- **ai-writing-detector 1.1.4 -> 1.1.5:** engine refreshed to upstream tip
+  `7a2c7d1`. `acknowledgment-loop` retired as a detector type (#239): the three
+  phrases also open ordinary replies and standard analytical English, so the
+  engine exposes **53** types now. The skill keeps the rule as a judgment call.
+  CJK/Japanese unsegmented-script documents are declined as `Unsupported
+  script` before the word gate (#241). CommonMark-correct fence and inline-code
+  scanning (#236, #314), Title Case header matches are line-bound and accept
+  first-person `I` (#291, #240), URL tracker-strip false positive fixed
+  (#210), bullet-list parsing made CommonMark-exact, version-heading em-dash
+  counting rewritten as a line scanner. `validate.js` gains the CommonMark
+  fence scanner (#236) and punctuation-preserving URL normalization (#210);
+  package banner kept. Behavioral probes added for the ack-loop retirement,
+  CJK decline, Title Case line-bound, fence boundary, and URL-strip fixes.
+- **humanizer:** `ai-ism-audit.md` marks acknowledgment loops as a judgment
+  call with the upstream rationale (detector retired, rule stays).
+- **writing-prose 1.1.3 -> 1.1.4:** vale binary refreshed to `v3.22.0` in WSL
+  `~/.local/bin` (Hunspell-conformant spelling, per-section `Vocab`, empty
+  `BasedOnStyles`/`UNSET` clearing, MDX/notebook format gains), Microsoft
+  style pack re-synced, house gate verified clean on `README.md`. No house
+  config changes; the 3.22.0 features are opt-in and not adopted yet.
+- Pins moved: avoid-ai-writing `fc979c6` -> `7a2c7d1` (tip, untagged); vale
+  `v3.21.0` -> `v3.22.0`.
+- SOURCES drift fixed: `simple_english_skill_version` summary/table now match
+  the shipped 2.4.0; `writing_prose_skill_version` now matches 1.1.4;
+  `ai_writing_detector_skill_version` corrected to 1.1.5.
+- Note: `vale-lint.sh` in the monorepo has CRLF line endings, so it fails when
+  invoked from inside WSL. Windows git-bash invocation is unaffected. Fix
+  queued for the next packaging pass; the gate was verified by calling vale
+  directly.
+
+## [2.11.1] - 2026-09-16
+
+avoid-ai-writing v3.35.0 engine absorb.
+
+- **ai-writing-detector 1.1.3 → 1.1.4:** `patterns.js` refreshed to upstream
+  v3.35.0 (`fc979c6`). `--context technical` now suppresses eight
+  technical-legitimate terms (`robust`, `comprehensive`, `seamless`,
+  `ecosystem`, `leverage`, `facilitate`, `underpin`, `streamline`); Title Case
+  header rule accepts acronym interior tokens; quadratic scans in
+  `analyzeText()` are now linear; `emotional-flatline` relabeled "Stock
+  reaction framing", style-only for authorship scoring. `validate.js`
+  unchanged. Not vendored: upstream GitHub Action / pre-commit gate and
+  fp-measure tooling. `categories.md` aligned with the new behavior.
+- **humanizer:** audit ref gains the "Stock reaction framing" rename note and
+  the technical-context carve-out language.
+- Pins moved: `v3.34.0` → `v3.35.0`, ref `b3e4bbd` → `fc979c6`.
+- vale re-checked: latest release is still `v3.21.0` (scan false positive);
+  no ingest.
+
+## [2.11.0] - 2026-09-12
+
+Generic writing-voice sample harvest.
+
+- **writing-voice 1.0.0 → 1.1.0:** on-demand compiled profile from the
+  user's own samples (`references/voice-from-samples.md`), fingerprint
+  collision rule, a few portable hard bans. No identity facts. Personalized
+  Hermes copy stays private.
+
+## [2.10.0] - 2026-09-12
+
+Chase mode and hosted detector spread.
+
+- **humanizer 1.6.2 → 1.7.0:** Chase depth iterates on `ai-writing-detector`
+  scores. Fingerprint gate (keep / ask / never inject) for social drafts.
+  Cargo-cult evasion (typos, fake personality) still rejected.
+- **ai-writing-detector 1.1.3 → 1.2.0:** `scripts/test_detectors.py` with
+  `--demo` (offline) and `--upload` (hosted APIs, full-draft disclosure).
+  Authorship claims still refused.
+
+## [2.9.5] - 2026-09-12
+
+avoid-ai-writing `v3.34.0` (`b3e4bbd`). No engine delta versus tip `a465548`.
+
+- **Pin only.** `detector/patterns.js` and `detector/validate.js` are unchanged
+  from the #73 em-dash zero-weight absorb. Detector skill stays 1.1.3.
+  Humanizer skill stays 1.6.2 (pattern 7 note already matches).
+- **Held:** upstream CLI (`bin/avoid-ai-writing.js`, #158), pattern-proposal
+  issue form, SSOT CI, README npm/follow docs. We already ship analyze and
+  validate CLIs; house style does not need their packaging layer.
+
+## [2.9.4] - 2026-09-11
+
+vale-cli/vale `v3.20.0` → `v3.21.0` (pin refresh).
+
+- **writing-prose 1.1.2 → 1.1.3**: the house gate now runs on vale 3.21.0.
+  Style packs re-synced; house config unchanged and still single-voice
+  (HermesHouse over Microsoft). No new config keys needed: the release adds
+  `doc(...)` selections, TextFSM views, and Jupyter support, none of which
+  the house style uses yet.
+
+avoid-ai-writing tip `a465548` past `v3.33.0` (no new tag).
+
+- **ai-writing-detector 1.1.2 → 1.1.3**: the `em-dash` rule weight drops 4
+  to 0, so over-limit dashes stay visible as P2 writing-quality flags
+  without moving the score, label, probabilities, or classification
+  (upstream #73). Vendored `patterns.js` is byte-identical to upstream tip.
+  House smoke is green plus a behavioral probe (dash-heavy text flags but
+  scores the same as its baseline).
+- **humanizer 1.6.1 → 1.6.2**: pattern 7 notes dash frequency is a style
+  judgment, never an authorship signal, matching upstream's new zero
+  weight. The house rule was already there; upstream caught up.
+- **Held**: the bare-URL quote-boundary fix in upstream
+  `scripts/markdown-prose.js` (packaging tooling we do not vendor) and the
+  README follow invitation (packaging noise).
+
+## [2.9.2] - 2026-09-06
+
+avoid-ai-writing moves to `v3.33.0` (`6da13ad`) and blader/humanizer to
+`v3.0.0` (`9862685`).
+
+- **ai-writing-detector 1.1.1 → 1.1.2**: engine vendored at `v3.33.0` with
+  two precise fixes. The `load-bearing` rule flips from a structural-noun
+  blocklist to an abstract-noun allowlist (fires only before assumption,
+  claim, invariant, premise, constraint, dependency, argument, or
+  abstraction; literal, predicative, and unlisted uses pass), trading recall
+  for precision. The preservation validator normalizes CRLF line endings up
+  front so frontmatter and tables in Windows-authored documents stay visible
+  to protection checks. House smoke is green plus behavioral probes for both
+  fixes.
+- **humanizer 1.6.0 → 1.6.1**: catalog grows to patterns 96-99 as
+  judgment-only P2 entries (transformation crutch, consequence-free
+  restatement, repeated empty concessions, repeated setup/reversal
+  punchlines), each with carve-outs and a never-invent repair rule. Pattern
+  9 gains split-sentence, multi-negation, and tailing-negation forms.
+  Pattern 72 adopts the abstract-noun boundary; pattern 74 gains the
+  obscured-decision-maker P2. Required checks gain a five-tell post-rewrite
+  sweep (contrast, closer, dash, triad, bold label).
+- **Not absorbed**: OpenAI plugin packaging, quote-normalizer and
+  style-checker scripts, SKILL-to-references split, and prose-contract
+  rewordings (packaging and tooling, not editorial knowledge); blader v3.0
+  strength ordering kept as upstream organization, with its durable
+  workflow and carve-outs folded into the entries above.
+
+## [2.9.1] - 2026-09-05
+
+avoid-ai-writing moves to `v3.29.0` (`d8c2351`) and vale to `3.20.0`.
+
+- **ai-writing-detector 1.1.0 → 1.1.1**: engine vendored at `v3.29.0` with
+  three new detector types (51 → 54): `launch-intro` (product-launch
+  introductions), `crowd-contrast` (claims propped on an invented lagging
+  crowd), and `fake-casual-prop` (stage directions and wink asides). Every
+  rule carries disclosed false-positive residue and deliberate misses;
+  upstream test fixtures pass and house smoke is green.
+- **humanizer catalog patterns 93-95**: the same three tells as editorial
+  entries with repair guidance and carve-outs. A duplicate pattern-86 section
+  was also merged back into one entry.
+- **writing-prose**: vale binary updated to `3.20.0` (WSL; style packs
+  resynced, house gate green). The release is style-authoring focused (rule
+  inheritance, nested rule directories); the house config is unchanged.
+- **Not absorbed**: corpus seed entries (upstream measurement infrastructure)
+  and the readme pattern-count wording.
+
+## [2.9.0] - 2026-08-29
+
+avoid-ai-writing pin moves to `v3.28.0` (3bd64f1): three commits past
+v3.26.0 (v3.27.0 rendered-markdown source mode + v3.28.0 Willison
+rhetorical-tic categories). Upstream main carries one unreleased docs
+commit; not ingested.
+
+- **Engine vendored at v3.28.0** (ai-writing-detector 1.0.6 → 1.1.0):
+  patterns.js gains `performed-insight`, `negation-chain`,
+  `dev-blog-boilerplate` detector types (48 → 51 types) and
+  `analyzeText({sourceMode: "rendered-markdown"})` frontmatter/comment
+  masking. Upstream test fixtures all pass; house smoke suite 16/16.
+- **humanizer 1.5.0 → 1.6.0**: pattern catalog gains **pattern 86
+  Performed-insight phrases** (the one judgment rule our catalog lacked;
+  the other six Willison categories were already absorbed). Fix guidance
+  and the quoted-speech carve-out carried over in house voice.
+- **Not absorbed**: the unreleased related-work README block (marketing).
+
+## [2.8.0] - 2026-08-24
+
+The AI-writing signals skill tracks upstream engine release v3.28.0, and the humanizer catalog grows by seven rhetorical-tic patterns.
+
+### Added
+
+- **ai-writing-detector 1.1.0**: engine pin to `v3.28.0` with three new
+  detector types (`performed-insight`, `negation-chain`,
+  `dev-blog-boilerplate`) and `sourceMode: "rendered-markdown"` scoring that
+  masks YAML frontmatter and HTML comments while keeping issue offsets
+  aligned with the source file.
+- **humanizer patterns 86-92** in the catalog: performed insight, negation
+  chain, dev-blog boilerplate, stacked rhetorical questions, same-opener
+  sentence runs, stranded auxiliary contrast, and colon into a triple. The
+  deterministic detector covers only the narrow subset of these; the rest
+  stay editorial judgment.
+
+## [2.8.2] - 2026-08-27
+
+vale-cli/vale pin moves to `v3.19.0` (from v3.18.0). Patch bump, pin-only.
+
+- **writing-prose**: WSL binary updated to 3.19.0; `vale sync` re-run for
+  the Microsoft style pack. No house config change: the release is MDX/JSX
+  children linting, Elixir comment extraction, and repeated-occurrence
+  tokens, none of which touch Markdown prose rules we run. House gate
+  verified on the skill set (SKILL.md clean, 0 errors).
+- **Win11 winget** still at 3.17.1 (manifest lag); house config stays
+  compatible with it.
+
+## [2.8.1] - 2026-08-26
+
+Humanizer now flags empty metaphor nouns and a couple of sentence habits that make a paragraph sound interchangeable with another project's docs.
+
+### Added
+
+- Abstract metaphor nouns in the vocabulary tiers (substrate, wedge, vector, locus, vantage, nexus, primitive-as-noun, flywheel, north star, endgame, and similar) with concrete-word substitutes.
+- Interchangeability test on the required-checks revision gate: a sentence that could appear unchanged in another project's docs is carrying nothing specific to this piece.
+- Mid-sentence colon crutch in the pattern catalog (connective colon with comparison framing). List and example colons stay legitimate.
+
+## [2.8.0] - 2026-08-24
+
+Edit mode refuses the wrong kind of file. Before rewriting a path in place, Humanizer confirms the file is prose and stops on source code, configuration, and generated data, with a reason. Quoted material, code blocks, and tables were already protected inside a file; this closes the choose-the-wrong-file case.
+
+### Changed
+
+- **humanizer 1.5.0**: prose-file gate in edit mode, documented in `ai-ism-audit.md`.
+
+## [2.7.0] - 2026-08-22
+
+New skill: `writing-voice` 1.0.0. One home for how an agent talks to its user, writes for other humans, and writes for machines.
+
+### Added
+
+- Three audience modes (Chat, Human, Worker) plus tone overlays (`<tone> <mode>`, for example "casual worker" or "professional human").
+- Tone definitions live in the Humanizer voice-profile table. Writing Voice routes and never restates them. Never-inject bounds every tone.
+- No personal data in the skill: no user facts, no platform names, no host paths beyond a deployment note. Personalized deployments keep their own copy and add user-specific routing on top.
+
+## [2.6.0] - 2026-08-22
+
+The Humanizer voice-profile table is now the tone definition store for Writing Voice subtypes. Writing Voice routes `<tone> <mode>` requests to that table and never restates the targets.
+
+### Changed
+
+- **humanizer 1.4.0**: voice-profile section notes the table doubles as the tone store. No target changes. The Never-inject binding from 2.5.3 still governs those tones.
+
+## [2.5.3] - 2026-08-22
+
+A voice profile can bring out what the source already has. It cannot manufacture what the source lacks.
+
+### Changed
+
+- **humanizer 1.3.1**: the voice-profile table opens with that binding. Casual, professional, and warm rows carry bounded targets, so the editor is not asked to add a first-person touch, a concrete claim, an explicit ask, or an acknowledgment the source never contained.
+
+## [2.5.2] - 2026-08-21
+
+The Vale gate runs 3.18.0. More document formats, same house rules.
+
+### Changed
+
+- **writing-prose 1.1.1**: WSL Vale binary updated to 3.18.0 (native MDX, Typst, Quarto, MyST, QDoc, R Markdown, plus scoping and alert-position fixes). House gate verified on the sample set and a real draft. Win11 winget still lags at 3.17.1; the WSL binary stays canonical.
+- `READMEs` added to the house accept list (pre-existing Vale spelling false positive).
+
+## [2.5.1] - 2026-08-19
+
+Closing Markdown fences now follow CommonMark: a fence is closed only when the closer is followed by spaces or tabs. An info string such as ` ```js ` no longer closes an outer fence, so headings inside a fenced block stay masked from the title-case-header rule.
+
+### Changed
+
+- **ai-writing-detector 1.0.6**: engine fence-range fix. New `scripts/fence-probe.js` behavioral probe (info-string masking, blank-suffix close, nbsp stays fenced, CRLF close) wired into `smoke.sh`.
+
+## [2.5.0] - 2026-08-19
+
+Humanizer's pattern catalog grows by five durable tells.
+
+### Added
+
+- Patterns 81–85: rhetorical setup (*What if...?*, *Think about it:*, *And that's okay*), narrator-from-a-distance, announced significance (*this is what X actually looks like*), additive hedge escalation (*not just X but also Y*), and template narrative arc (*By the time X, I was Y*). Each has tell, repair, and carve-outs, cross-referenced against adjacent patterns 9 and 76.
+
+### Changed
+
+- **humanizer 1.3.0**: version bump for the five catalog patterns.
+
+## [2.4.0] - 2026-08-18
+
+`ste_lint` is now `voice_lint`. The linter is a generic voice check, not STE-locked, and it can report AI-slop tells without counting them as form violations.
+
+### Changed
+
+- **Rename**: `scripts/ste_lint.py` → `scripts/voice_lint.py`. Usage docs, the test contract, and sibling references updated. Historical changelog entries keep the old name.
+- **New `tells` report-only dict** (never counted toward `total`): cliché global openers, conclusion signposts, hedge softeners, AI buzzwords, and the "No A. No B. Just C." negation triad. Narrow legitimate uses stay judgment calls.
+- **simple-english 2.4.0**: version bump for the rename and tells.
+
+## [2.3.0] - 2026-08-18
+
+voice_lint catches a single clipped negation fragment (`"Not a X."`) closing a paragraph.
+
+### Added
+
+- **simple-english 2.3.0**: `detect_rhythm()` gains `end_para_neg_fragments` for verbless negation fragments that close a paragraph. Precise shape keeps false positives near zero: paragraph-final segment only, negation lead plus determiner or adjective, no finite verb, no contrast-comma continuation. Skipped idioms include "Not that", "No,", "No thanks", "No one", and "Not everyone". Report-only, never counted toward the form total.
+
+## [2.2.0] - 2026-08-18
+
+Prose-rhythm findings join the mechanical lint.
+
+### Added
+
+- **simple-english 2.2.0**: voice_lint gains `detect_rhythm()`, reporting staccato stacks (3+ consecutive sentences of six words or fewer) and clipped negation-fragment tails ("No X. No Y." closing a paragraph). Sentence-length variance ships as context. Markdown-aware: headings break stacks, each bullet is one unit, table rows are skipped. Rhythm findings are reported separately and never counted toward the form total.
+
+### Fixed
+
+- **simple-english 2.2.1**: flush staccato stacks that run to end of text.
+
+## [2.1.0] - 2026-08-17
+
+Skills now declare who they write for. Humanizer is for other humans. Simple English is for machines and procedures.
+
+### Added
+
+- **simple-english 2.1.0**: Worker register (machines and procedures only; README and changelog work bounce to Humanizer).
+- **humanizer 1.2.0**: Human register (READMEs, changelogs, public posts, OSS issues and PR comments; PR bodies bounce to Simple English).
+
+## [2.0.1] - 2026-08-17
+
+Humanizer picks up two new editorial patterns and tightens a few existing ones.
+
+### Added
+
+- **humanizer 1.1.1**: patterns 79 (shadowboxing objections) and 80 (editorial scar tissue). Pattern 11 extended with repeated sentence openings. Pattern 21 extended with casual-register signposts ("heads up", "quick note", "one thing that bit me"). Figurative "gate/gated/gating" added to Tier 2 vocabulary, with a technical-usage carve-out (CI gates, gated clocks, gated releases stay). Named objections, real design alternatives, and deliberate rhetorical repetition stay.
+
+## [2.0.0] - 2026-08-17
+
+`plain-english` is now `simple-english`. The skill carries a full practical STE catalog.
+
+### Changed
+
+- **simple-english 2.0.0** (renamed from plain-english): word, verb, sentence, punctuation, and structure rules with ASD-STE100 rule-number citations; modal ladder; slop-to-simple substitution table; vocabulary discipline; word-counting rules (backticked commands count as one word); condition-first; warnings-before-steps; and beyond-documentation use cases (error messages, runbooks, incident reports, release notes, agent instructions, translation prep). Adds `references/checklist.md` and `references/use-cases.md`. Existing strict and STE-flavored modes, the linter workflow, and guardrails stay.
+- Cross-skill references, README, and tests use the new name. Install command is `npx skills add apoapostolov/humanizer --skill simple-english`.
+
+## [1.1.0] - 2026-08-14
+
+Clearer voice ownership across the suite.
+
+### Changed
+
+- **humanizer 1.1.0**: explicit voice hierarchy. User samples, medium, audience, and source voice outrank generic pattern rules. Mixed documents are edited by section job instead of passing through every skill in sequence.
+- **plain-english 1.1.0**: separates strict form control from STE-flavored diagnosis. Contractions and sentence-length findings are no longer automatic failures in natural technical prose. Mixed-document whole-file scoring is rejected.
+- **writing-prose 1.1.0**: Vale warnings are reread prompts. Drops a stale dependency on the retired `writing` skill. Blocks forced facts, manufactured digressions, and uniform short-sentence cleanup.
+- Mode-boundary examples and regression tests for the cross-skill voice contract.
+
+## [1.0.3] - 2026-08-13
+
+The detector and Humanizer both treat unnecessary hyphenation as a copyedit, not an authorship signal.
+
+### Added
+
+- **ai-writing-detector 1.0.5**: `unnecessary-hyphenation` rule (welded open noun phrases, closed-form compounds, adverbial attributive hyphens). Zero-weight P2 copyedit; it does not affect the AI score. Path masking hardened against superlinear backtracking.
+- **humanizer**: pattern 57 expanded with cut-first `actually` guidance (delete when emphasis-only, keep for named corrections). New pattern 78 (unnecessary hyphenation). "Hyphenated modifier pile" renamed to "hyphenated modifier stacking."
+
+## [1.0.2] - 2026-08-07
+
+Maintenance only. No skill behavior change.
+
+## [1.0.1] - 2026-08-05
+
+Detector lookup no longer false-positives on `constructor`. Vale gate moves to 3.17.1.
+
+### Fixed
+
+- **ai-writing-detector 1.0.4**: `Object.hasOwn` guard in tier lookups. `check-engine-pin.sh` syntax bug fixed.
+
+### Changed
+
+- **writing-prose 1.0.1**: Vale binary 3.17.0 → 3.17.1 (startup and lookaround performance, Org HTML writer, dry-run config, Windows on ARM). No style-pack or config changes.
+
+## [1.0.0] - 2026-08-05
+
+Initial release. Four writing skills for agents: Humanizer, Plain English, AI Writing Detector, and Writing Prose.
+
+MIT licensed. See each skill's `SKILL.md` for usage.

@@ -84,16 +84,28 @@ IMAGE_LINE = re.compile(r'^\s*!\[[^\]\n]*\]\([^)\n]*\)\s*$')
 
 def tokenise(text):
     """Split text into tokens; atomic spans ($...$, [[...]], [..](..), `...`)
-    are kept whole, everything else splits on whitespace."""
+    are kept whole, everything else splits on whitespace.
+
+    Adjacency is preserved: characters glued to an atomic span in the source
+    (the full stop in ``$r = s/(c+v)$.``) stay glued to it, so reflowing never
+    inserts a space before punctuation. The atomic spans are stashed behind
+    whitespace-free placeholders, the text is split on whitespace, and the
+    placeholders are restored inside whichever word carried them.
+    """
+    spans = []
+
+    def _stash(m):
+        spans.append(m.group(0))
+        return f"\x00{len(spans) - 1}\x00"
+
+    protected = ATOMIC.sub(_stash, text)
     tokens = []
-    pos = 0
-    for m in ATOMIC.finditer(text):
-        if m.start() > pos:
-            tokens.extend(text[pos:m.start()].split())
-        tokens.append(m.group(0))
-        pos = m.end()
-    if pos < len(text):
-        tokens.extend(text[pos:].split())
+    for word in protected.split():
+        if "\x00" in word:
+            word = re.sub(
+                r"\x00(\d+)\x00", lambda mm: spans[int(mm.group(1))], word
+            )
+        tokens.append(word)
     return tokens
 
 

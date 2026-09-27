@@ -1,0 +1,208 @@
+<!-- markdownlint-disable MD013 -->
+
+# Update vendored detector engine
+
+Checklist when avoid-ai-writing publishes a newer detector than the monorepo pin
+(see root `SOURCES.md` → packaged skill `ai-writing-detector`).
+
+## 1. Fetch upstream
+
+```bash
+# optional local checkout
+git -C "$AVOID_AI_WRITING_ROOT" fetch --tags origin
+git -C "$AVOID_AI_WRITING_ROOT" log --oneline <old_pin>..vX.Y.Z -- detector/
+git -C "$AVOID_AI_WRITING_ROOT" diff <old_pin>..vX.Y.Z -- \
+  detector/patterns.js detector/validate.js detector/CATEGORIES.md
+```
+
+## 2. Copy engine files only
+
+```bash
+cp "$AVOID_AI_WRITING_ROOT/detector/patterns.js" scripts/patterns.js
+cp "$AVOID_AI_WRITING_ROOT/detector/validate.js" scripts/validate.js
+```
+
+Keep this package’s wrapper layer:
+
+- `scripts/report.js`
+- `scripts/analyze.js`
+- `scripts/validate-cli.js`
+- `scripts/smoke.sh`
+- `scripts/check-engine-pin.sh`
+
+Re-apply the short package banner at the top of `validate.js` if upstream
+overwrite removed it (CLI wrappers do not depend on that banner).
+
+## 3. Categories
+
+If upstream types changed, update `references/categories.md` (localized map).
+Do not paste upstream paths that reference missing CI files.
+
+## 4. Verify
+
+```bash
+bash scripts/smoke.sh
+bash scripts/check-engine-pin.sh   # optional clone compare
+```
+
+## 5. Version + monorepo
+
+- Bump skill `version` in `SKILL.md` + `package.json` (**patch** for pin-only).
+- Update monorepo `SOURCES.md` pin fields and `ai_writing_detector_skill_version`.
+- `CHANGELOG.md` note: engine pin old → new; what changed editorially if anything.
+- Sync live installs; commit; push if asked.
+
+## 5b. Do not vendor
+
+- corpus/, RAID/HC3 downloaders, PROOF.md self-scan budgets
+- detector-evasion framing
+- treating scores as authorship
+
+### No-engine-delta releases
+
+v3.23.0 (2026-08-03) changed no `detector/` files. The release added the
+optional `--style` house-style layer: user-supplied JSON config
+(`register` + `mechanics`), `scripts/check-style.js` for the checkable
+mechanics, and `examples/` starters. No bundled guides; a bare guide name is a
+best-effort fallback with an explicit no-compliance claim. Not vendored: it is
+upstream CLI machinery outside the detector engine, and this package already
+covers mechanical form control via the sibling `simple-english` STE lint. On
+such releases, update SOURCES release pins but keep the engine pin and
+`check-engine-pin.sh` `expected_upstream_tag` unchanged.
+
+v3.23.1 (2026-08-05) changed no `detector/` files. The Object.hasOwn FP fix
+(`constructor` and other `Object.prototype` collisions) was already at our
+engine pin `1ea2f0c` (post-v3.23.0 tip). `patterns.js` and the functional body
+of `validate.js` are byte-identical between our pin and the tag. The release
+formalized CI/release automation (npm provenance pipeline, cursor-rules leak
+gate, pattern-count CI assertion). SOURCES release pins updated; engine pin,
+detector skill version, and `check-engine-pin.sh` unchanged.
+
+### Engine-delta releases
+
+v3.24.0 (2026-08-07) added `unnecessary-hyphenation` to `patterns.js`: a
+zero-weight P2 copyedit with 48 engine `type`s (was 47) and 62 categories
+(was 61). Three curated subclasses: welded open noun phrases, closed-form
+compounds, and adverbial attributive hyphens. Protected-span masking
+hardened (code, quotes, URLs, paths, YAML, tables, HTML) with bounded path
+components to prevent superlinear backtracking. `validate.js` unchanged.
+Engine pin moved to `3c0fd8a`. Detector skill version 1.0.5.
+
+v3.25.0 (2026-08-12) added `actually` as a cut-first hollow intensifier to
+`SKILL.md` only. No `detector/` changes. The token is context-dependent
+(emphasis filler vs corrective prose), so a regex would flag ordinary
+corrective writing. Catalog stays at 62 categories, engine at 48 `type`s.
+Editorial-only absorb into humanizer pattern 57.
+
+Untagged tip `b504e20` (2026-08-19, upstream PR #127, fixes #77) tightened
+`fenceRanges()` so a closing Markdown fence is valid only when followed by
+spaces or tabs (CommonMark). Previously any same-char fence line, including
+an info-string opener such as ```js, closed an outer fence, which exposed
+headings inside a fenced block to the title-case-header detector. Patterns
+byte-for-byte identical to upstream tip; `validate.js` unchanged. Engine pin
+moved to `b504e20`. Detector skill version 1.0.6. No editorial change (engine
+FP/masking fix only). Behavioral probe `scripts/fence-probe.js` added and
+wired into `smoke.sh`.
+
+v3.28.0 (2026-08-28) added three new engine `type`s from Simon Willison's LLM
+cliche highlighter: `performed-insight` (weight 3, density-classified like
+tier2), `negation-chain` (weight 5, strong structural tell), and
+`dev-blog-boilerplate` (weight 3). Engine total 48 -> 51 `type`s. The
+deterministic subset is deliberately narrower than the editorial rules:
+performed-insight omits literal "the punchline" / "worth naming" senses;
+negation-chain fires only on sentence-initial chains of three-plus short
+"no ..." items, comma-joined subject-elided "did not ..." chains, and the
+"don't call it X -- call it Y" repeat (two-item chains stay judgment calls);
+dev-blog-boilerplate omits literal "batteries included" but keeps "it just
+works out of the box" detectable without reviving the "works out to" FP.
+The same release added `sourceMode: "rendered-markdown"` to `analyzeText`:
+initial YAML frontmatter and HTML comments are masked before scoring while
+issue and sentence-highlight offsets stay aligned with the source file. The
+`validate.js` comment contract was also refreshed ("tables" joined the
+protected-span list; AI-referrer wording tightened) with no logic change.
+Behavioral probes (hit + FP quiet + rendered-markdown masking) verified at
+absorb time. Detector skill version 1.1.0 (new engine capabilities: 3 rule
+types + scoring source mode).
+
+v3.29.0 (2026-09-03) added three more engine `type`s from the
+`welttowelt/stop-slop-refined` merged-system diff (upstream #108):
+`launch-intro` (weight 8, single-hit opener class), `crowd-contrast`
+(weight 6, gated on dismissive verbs in -ing plus "was still"), and
+`fake-casual-prop` (weight 8, closed lists: six asterisk stage directions
+and the four (yes|no) x (really|seriously) parentheticals). Engine total
+51 -> 54 `type`s. Precision-over-recall residue is disclosed per rule:
+two-token product names miss, literal progressive uses of the crowd verbs
+fire, and register neighbours like `*checks calendar*` stay clean on
+purpose. `validate.js` unchanged this release. Behavioral probes (hit +
+FP quiet on person-introductions, UI `Enter` instructions, and literal
+simultaneity) verified at absorb time. Detector skill version 1.1.1.
+
+v3.30.0–v3.33.0 (2026-09-05; single absorb) changed the engine in exactly two
+places. `patterns.js`: the `load-bearing` rule flipped from a structural-noun
+blocklist (fire unless a building noun follows) to an abstract-noun allowlist
+(fire only before assumption, claim, invariant, premise, constraint,
+dependency, argument, or abstraction, including plurals). Literal building
+uses, unlisted nouns, intervening modifiers, mixed physical-or-abstract nouns
+(structure, element, frame, foundation), and predicative uses now pass by
+construction: precision over recall, with the missed-metaphor residue disclosed
+in the rule comment (upstream #56). `validate.js`: CRLF line endings normalize
+to LF once, up front, so YAML frontmatter and table blocks in Windows-authored
+documents stay visible to the protection extractors; a lone carriage return
+remains meaningful and still compares exactly. v3.30.0–v3.32.0 editorial
+additions (repeated setup/reversal punchlines, judgment-only clarity rules,
+quote normalizer, SKILL-to-references split, OpenAI plugin packaging) carry no
+engine delta and were absorbed as humanizer catalog entries 96–99 plus
+pattern 9/72/74 extensions, not as engine changes. Behavioral probes
+(load-bearing allowlist hit + FP quiet + predicative quiet; CRLF frontmatter
+protection) verified at absorb time. Detector skill version 1.1.2.
+
+v3.33.0+tip `a465548` (2026-09-08; no new tag) changes the engine in one
+place. `patterns.js`: the `em-dash` rule weight drops 4 to 0, so over-limit
+dashes stay visible as P2 writing-quality flags without moving the score,
+label, probabilities, confidence, or classification (upstream #73). The
+technical-mode comment refreshes to match: prose-only rules carry their own
+gates instead of a blanket em-dash weight cut. `validate.js` unchanged.
+Vendored `patterns.js` is byte-identical to upstream tip. The URL
+quote-boundary fix in upstream `scripts/markdown-prose.js` is packaging
+tooling we do not vendor, so it stays held. Behavioral probe (em-dash-heavy
+text: flag visible, score and label unchanged vs baseline) verified at absorb
+time. Detector skill version 1.1.3.
+
+v3.34.0 (2026-09-11; no-engine-delta) does not change `detector/patterns.js`,
+`detector/validate.js`, or `detector/CATEGORIES.md` versus tip `a465548`.
+The tag wraps the already-absorbed em-dash zero-weight (#73) plus a new
+zero-dependency CLI (`bin/avoid-ai-writing.js`), a pattern-proposal issue
+form, SSOT CI, and README/npm docs. We do not vendor the CLI: this package
+already ships `analyze.js` / `validate-cli.js`. Detector skill version stays
+1.1.3. Engine pin stays `a465548`.
+
+v3.35.0 (2026-09-16; patterns.js delta) changes engine behavior in three
+durable ways. (1) `--context technical` now suppresses eight
+technical-legitimate vocabulary terms (`robust`, `comprehensive`, `seamless`,
+`ecosystem`, `leverage`, `facilitate`, `underpin`, `streamline`) via a
+`TECHNICAL_EXEMPT` set; general mode still flags them (#237). (2) The
+Title Case header rule accepts acronyms (`AI`, `API`, `CLI`) and capital
+`A` as interior tokens, so more genuine tells flag without breaking all-caps
+banner lines (#240). (3) Several quadratic scans in `analyzeText()` are now
+linear, and the `emotional-flatline` category is relabeled "Stock reaction
+framing" with weight 2 to 0 (style-only for authorship scoring; the API type
+name is stable). Not vendored: the new GitHub Action / pre-commit gate
+(`avoid-ai-writing-gate`, per-file finding threshold) and fp-measure tooling;
+this package's report layer and smoke already cover the operator surface.
+Behavioral probe at absorb: 50-word technical prose with six exempt terms
+scored 16/5 issues in technical mode vs 53/14 in general, and no exempt term
+appeared in technical findings. Detector skill version 1.1.4.
+
+v3.36.0 post-release tip `2a7e999` changes `patterns.js` only. It masks
+double-quoted spans and recognizes single-line and compact Markdown quote blocks,
+so quoted material is excluded before scoring while offsets remain aligned to
+the source. It adds narrow staged-discovery matches under the existing
+`performed-insight` type and deduplicates contained insight/flatline signals.
+`validate.js` and `CATEGORIES.md` have no behavioral delta. Keep the package
+report layer, CLI, and smoke suite unchanged. Probes cover a staged discovery,
+a literal outcome, quoted AI phrasing, and unquoted prose.
+
+## 6. Opinion report (required)
+
+Per monorepo SOURCES Update procedure: rate changes minor/moderate/major, what
+they enable, and any rule conflicts (`change existing` / `ignore new` / `hybrid`).
