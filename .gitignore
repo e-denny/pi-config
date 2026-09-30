@@ -11,6 +11,7 @@ __pycache__/
 agent/sessions/
 agent/npm/
 web-search-cache/
+agent/ctrl-r-pi-history.json
 agent/extensions/herdr-agent-state.ts
 
 # Extension dependencies

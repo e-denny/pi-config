@@ -1,0 +1,14 @@
+{
+  "name": "ctrl-r-pi",
+  "version": "0.1.0",
+  "description": "fzf-style reverse prompt search for pi: Ctrl-R opens a fuzzy-searchable list of the last 400 unique prompts and restores the selected one to the editor.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi", "pi-extension", "prompt-history", "ctrl-r", "fzf", "fuzzy-search"],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
