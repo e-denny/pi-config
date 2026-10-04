@@ -1,7 +1,7 @@
 # AI Tells: Full Catalog
 
 The complete reference the skill loads during a rewrite. Ordered by depth:
-substance first (what no linter catches), diction last (the shallowest), with the
+substance first (what no word list catches), diction last (the shallowest), with the
 v0.4.0 cited-tell categories (cliché, naming, inflation, and rhetoric
 calibration) added as category 10. Each entry gives the tell and at least one
 `BAD →` / `GOOD →` pair.
@@ -42,7 +42,7 @@ writing it.
 **Conversational scaffolding / chatbot framing.** The assistant register
 leaking into the page: openers, fake engagement, and sign-offs that belong in a
 chat reply, not a document. The single most recognizable tell in pasted-from-chat
-text. The linter flags these as `chatbot_scaffold`.
+text.
 
 - BAD → "Sure! Here's the thing about caching. Great question — let me break it
   down. I hope this helps!"
@@ -81,9 +81,8 @@ reaches for this because it lets a sentence sound active while dodging the actua
 actor. A complaint doesn't *become* a fix; someone fixed it. Data doesn't *tell*
 you anything; you read it and drew a conclusion. The fix is to name the human:
 or, when no specific person fits, put the reader in the seat with "you." Never
-invent an actor to satisfy the rule (that is fabrication; see the
-anti-hallucination protocol). The linter flags this as `false_agency`, and
-**mutes it for `academic`**, where "the data show" is a genuine convention.
+invent an actor to satisfy the rule (that is fabrication). In `academic` prose,
+"the data show" is a genuine convention and stays.
 
 - BAD → "The complaint becomes a fix that week."
 - GOOD → "The on-call engineer shipped the fix that week."
@@ -94,7 +93,7 @@ anti-hallucination protocol). The linter flags this as `false_agency`, and
 **Telling instead of showing / vague declarative.** A sentence that *announces*
 weight (structural, significant, deep, hard) without naming the specific thing.
 It is vacuity wearing a serious face: cut it, or replace it with the concrete
-fact it gestures at. The linter flags the stock phrasings as `vague_declarative`.
+fact it gestures at.
 
 - BAD → "The implications are significant." / "The reasons are structural." /
   "This is genuinely hard."
@@ -105,10 +104,10 @@ fact it gestures at. The linter flags the stock phrasings as `vague_declarative`
 
 ## 2. Structure & rhythm
 
-The structural half of what perplexity/burstiness detectors measure. Highest
+The structural half of the problem: rhythm and variation. Highest
 mechanical leverage after substance.
 
-**Low burstiness.** Every sentence the same length and shape. The single
+**Low variation.** Every sentence the same length and shape. The single
 strongest mechanical tell.
 
 - BAD → "The system is fast. The system is reliable. The system is scalable. The
@@ -141,8 +140,8 @@ strongest mechanical tell.
 
 **Wh-opener crutch.** A run of sentences opening with *What / When / Why / How /
 Which* ("What makes this hard is…", "Why does this matter?"). A specific,
-high-frequency case of uniform openers and a Socratic-posturing tell; the linter
-flags it as `wh_opener` on a run of three or a high ratio. The fix is to lead
+high-frequency case of uniform openers and a Socratic-posturing tell; it
+becomes a tell on a run of three or a high ratio. The fix is to lead
 with the subject and name the thing.
 
 - BAD → "What makes this hard is scale. Why does that matter? How do you know?"
@@ -176,8 +175,7 @@ is simple: ...", "Here's the catch: ...").
 **Negative listing.** The multi-item striptease: listing what something is *not*
 across two or more sentences before revealing what it *is*. Distinct from the
 two-part "not X, it's Y" (that's antithesis); this is the three-beat runway. The
-reader doesn't need it. State the answer. The linter flags it as
-`negative_listing`.
+reader doesn't need it. State the answer.
 
 - BAD → "It wasn't a tooling problem. It wasn't a staffing problem. It was a
   priorities problem."
@@ -186,8 +184,8 @@ reader doesn't need it. State the answer. The linter flags it as
 **Dramatic fragmentation / performative simplicity.** Sentence fragments staged
 for profundity ("Speed. That's it. That's the tradeoff.", "X. And Y. And Z."). A
 machine cadence in expository prose. Fragments are legitimate craft in
-`creative`, `casual`, and terse `release_notes`, so the linter
-(`dramatic_fragmentation`) **mutes this for those registers**. Fix it only where
+`creative`, `casual`, and terse `release_notes`, so the tell does not apply
+there. Fix it only where
 the genre is straight exposition.
 
 - BAD → "You can only pick two. That's it. That's the tradeoff."
@@ -200,14 +198,14 @@ the genre is straight exposition.
 Everything in section 2 predates the current model generation. This section is
 what is left once a model has been trained away from "delve" and "tapestry": the
 prose is clean, organized, and grammatically distinctive. Measured on this repo's
-corpus, `participial_tail` and `cleft` together carry **30% of the score mass** on
-realistic modern output and **0%** on 2023-era caricature.
+corpus, participial tails and clefts together carry roughly a third of the
+machine-made signal in realistic modern output, and none in 2023-era caricature.
 
 Every construction below is ordinary English that good writers use deliberately.
-The tell is the rate, never the instance, and the linter gates all of them on a
-count plus a density. Do not hunt these to zero; that is principle 2's failure.
+The tell is the rate, never the instance; one appearance is never the finding.
+Do not hunt these to zero; over-correcting is its own tell.
 
-**Resultative participial tail** (linter: `participial_tail`) is a comma plus an
+**Resultative participial tail** is a comma plus an
 `-ing` verb that supplies the consequence of the main clause, appended to sentence
 after sentence. It manufactures a sense of payoff for free, and because the tail
 is grammatically subordinate it also slips a claim past unexamined.
@@ -221,7 +219,7 @@ is grammatically subordinate it also slips a claim past unexamined.
 - The test: if the tail were a separate sentence, would you still assert it? When
   the answer is no, the tail was decoration.
 
-**Cleft** (linter: `cleft`): the sentence defers its real subject to stage the
+**Cleft**: the sentence defers its real subject to stage the
 point. Three forms, one habit.
 
 - Wh-cleft. BAD → "What actually consumed the time was the reconciliation."
@@ -234,7 +232,7 @@ point. Three forms, one habit.
 - One cleft in a page is rhetoric and worth keeping. Four is a cadence, and it
   reads as a writer who reaches for the same frame every time a point arrives.
 
-**Copula-only paragraphs** (linter: `copula_density`): everything simply *is*.
+**Copula-only paragraphs**: everything simply *is*.
 
 - BAD → "Data quality is a foundational concern. The main risk is inconsistency.
   The result is a pipeline that is difficult to reason about."
@@ -243,17 +241,17 @@ point. Three forms, one habit.
 - This one correlates with the vacuity in section 1 more than with anything
   mechanical: a paragraph where nothing happens usually is not saying anything.
 
-**Clause welding** (linter: `clause_splice`): ", and it is…", ", but this
+**Clause welding**: ", and it is…", ", but this
 means…", four or five times a page. Correct English, and doing it repeatedly
 flattens the prose into one continuous middle-length line, which is the same
-defect burstiness measures from the other side.
+defect as low variation, seen from the other side.
 
 - BAD → "The change is small on paper, and it is large in practice, and it removes
   the nightly window that everything else was scheduled around."
 - GOOD → "The change is small on paper. In practice it removes the nightly window
   that everything else had quietly been scheduled around."
 
-**Templated openings** (linter: `paragraph_openers`, `bullet_openers`): every
+**Templated openings**: every
 paragraph opening with the same two words, every list item opening with the same
 verb or the same `-ing` form. A reader skimming sees only the openings, so
 repetition there is disproportionately visible.
@@ -262,7 +260,7 @@ repetition there is disproportionately visible.
 - GOOD → let the items say different kinds of thing, or fold the list into a
   sentence.
 
-**Stacked noun chains** (linter: `noun_chain`): "the reduction of the complexity
+**Stacked noun chains**: "the reduction of the complexity
 of the design of the interface". Make one of the nouns the verb: "simplifying the
 interface cut the design work."
 
@@ -286,7 +284,7 @@ age".
 - BAD → "When it comes to performance, at the end of the day it's about latency."
 - GOOD → "Performance here means latency."
 
-**Business jargon** (the linter's `jargon` category): corporate buzzwords that
+**Business jargon**: corporate buzzwords that
 delete cleanly: synergy, leverage, circle back, touch base, move the needle,
 low-hanging fruit, value-add, core competency, actionable, best-in-class,
 operationalize, paradigm shift, thought leadership, north star, table stakes,
@@ -365,7 +363,7 @@ when every sentence is clean.
 
 - BAD → "optimize" in one paragraph, "optimise" in the next; "color" and
   "colour".
-- GOOD → one dialect throughout (use `--dialect` to catch this).
+- GOOD → one dialect throughout.
 
 **Heading-case drift.** Title Case headings mixed with sentence case.
 
@@ -413,8 +411,8 @@ committing.
 
 ## 9. Punctuation & mechanics (dashes, repetition, spacing)
 
-Mechanical correctness that the linter checks directly (`dash_style`,
-`doubled_word`, `mechanics`) plus the consistency rules around them. These are
+Mechanical correctness (dash style, doubled words, spacing) plus the
+consistency rules around them. These are
 universal-core: wrong in every register.
 
 ### Dashes: use the right mark, and stay consistent
@@ -432,10 +430,9 @@ loudest AI tells.
   uniform comma signature. A paired aside becomes an appositive
   (`result — which surprised us — held` → `result, which surprised us, held`); a
   single dash usually wants a period or a colon. Reserve the em-dash for
-  `creative`, where wide cadence is the genre's tool. The `--fix` autofixer
-  rewrites em-dashes (and `--`, spaced hyphens, non-numeric en-dashes) to commas
-  automatically; the rewrite pass then upgrades to a period/colon/parens where
-  they read better.
+  `creative`, where wide cadence is the genre's tool. The rewrite pass converts
+  em-dashes (and `--`, spaced hyphens, non-numeric en-dashes) to commas, then
+  upgrades to a period, colon, or parenthesis where those read better.
 
 Hard rules:
 
@@ -488,7 +485,7 @@ specific, high-frequency reflex a reader recognizes on sight.
 
 **Cliché metaphor.** The stock figurative phrase reached for instead of the
 literal fact. AI defaults to a small set: *foundation*, *landscape*, *journey*,
-*double-edged sword*, *tapestry*. The linter flags these as `cliche_metaphor`.
+*double-edged sword*, *tapestry*.
 
 - BAD → "Building on this foundation, we navigate the evolving landscape of our
   data journey, a double-edged sword of opportunity and risk."
@@ -497,17 +494,15 @@ literal fact. AI defaults to a small set: *foundation*, *landscape*, *journey*,
 
 **Name selection.** Invented people skew hard to a few names. AI reaches for
 *Emily* and *Sarah* in 63-70% of generated examples and over-uses the *Dr.* title.
-A cast that is all Emilys and Doctors reads as synthetic. The linter flags this as
-`name_selection`.
+A cast that is all Emilys and Doctors reads as synthetic.
 
 - BAD → "Dr. Emily Carter and Dr. Sarah Chen led the study."
 - GOOD → use varied, ordinary names, or better, name the real person, or cut
-  the example. Never invent a person to add texture (see the anti-hallucination
-  protocol).
+  the example. Never invent a person to add texture.
 
 **Significance inflation.** Empty phrases that assert importance without earning
 it: *opens new avenues*, *paves the way*, *cannot be overstated*, *marks a turning
-point*. The linter flags these as `significance_inflation`.
+point*.
 
 - BAD → "This opens new avenues and paves the way for progress whose importance
   cannot be overstated."
@@ -523,8 +518,7 @@ what you measured.
 
 **Sycophancy.** Reflexive praise and agreement bleeding into prose: "Great
 question!", "You're absolutely right", "Excellent point". One of the top cited
-tells, and no word list catches all of it; read for the reflex. The linter flags
-the stock openers as part of `chatbot_scaffold`.
+tells, and no word list catches all of it; read for the reflex.
 
 - BAD → "Great question! You're absolutely right that caching matters here."
 - GOOD → "Caching matters here because reads outnumber writes ten to one."
@@ -533,8 +527,7 @@ the stock openers as part of `chatbot_scaffold`.
 Pangram Labs measured the overuse rate against a human baseline: *as a poignant*
 ~49,000x, *as a powerful reminder* ~43,000x, *faced numerous challenges* ~30,000x,
 *the complex interplay* ~21,000x, *vibrant tapestry* ~17,000x, *in the
-ever-evolving* ~11,000x. Any of these is a near-certain tell. The linter flags
-them as `aidiolect`.
+ever-evolving* ~11,000x. Any of these is a near-certain tell.
 
 - BAD → "In the ever-evolving landscape, the complex interplay of forces is a
   powerful reminder of our vibrant tapestry."
@@ -545,8 +538,8 @@ strength must not exceed evidence strength.** Two-thirds of AI outputs are
 rhetorically stronger than the human original they replace; rhetoric intensity
 correlates with estimated LLM usage at r=0.904. So the safest default is to
 *understate*. If you measured a 40% drop, say 40%, not "dramatic." If you have one
-example, don't say "consistently." The linter's significance, superlative, and
-aidiolect checks all serve this one rule.
+example, don't say "consistently." Significance inflation, superlative creep,
+and aidiolect phrases all serve this one rule.
 
 - BAD → "This revolutionary result dramatically transforms how we think about
   latency."

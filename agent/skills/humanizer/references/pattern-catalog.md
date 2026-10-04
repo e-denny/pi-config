@@ -2,13 +2,12 @@
 
 # Humanization pattern catalog
 
-Use this catalog when a draft needs systematic diagnosis. It supports the editing
-sequence in [humanizing-text.md](humanizing-text.md); it does not replace that
-sequence.
+Use this catalog when a draft needs systematic diagnosis. It works with the
+rewrite reference in [ai-tells.md](ai-tells.md) and does not replace it.
 
 Patterns are contextual prompts, not proof of AI authorship. Diagnose clusters and
 reader impact. Preserve intentional rhetoric, genre conventions, technical terms,
-quoted language, and the writer's established voice. Do not score or rewrite
+quoted language, and the writer's established voice. Do not evaluate or rewrite
 quoted examples, code blocks, or attributed excerpts unless the brief includes
 them.
 
@@ -26,6 +25,7 @@ them.
 - [How to use the catalog](#how-to-use-the-catalog)
 - [Absorbed tells 100-106](#absorbed-tells-100-106)
 - [Argument architecture](#argument-architecture-patterns-107-114)
+- [Merged staging and rhythm patterns](#merged-staging-and-rhythm-patterns-115-117)
 
 ## Words and claims: patterns 1-6
 
@@ -82,7 +82,7 @@ in one passage.
 
 **Repair:** Keep a dash for a real interruption or turn. Use a period, comma,
 colon, or reordered sentence elsewhere. Dash frequency is a style judgment,
-never an authorship signal: upstream scores it at zero weight for the same
+never an authorship signal, for the same
 reason the house rule already states below.
 
 ### 8. Rule-of-three padding
@@ -111,11 +111,6 @@ because both halves carry information should be varied in shape, not repeated:
 pick two or three places where the contrast earns its keep and state the rest
 positively. When the tail is the paragraph's default sentence shape, the
 repetition is the tell even though each instance is defensible.
-
-**Detector:** `discourse-negated-tag` (ai-writing-detector) fires on the
-clipped appositive form (a short noun phrase after a comma and *not*), with
-quoted spans excluded. A high `by_pattern` count is the finding; no single hit
-is.
 
 **Carve-outs:** Keep a contrast when the negative half corrects a belief the
 reader actually holds, or when both halves carry information. Negations
@@ -200,8 +195,20 @@ unclear.
 ### 19. Thematic restatement ending
 
 **Tell:** The final sentence explains what the preceding scene or passage meant.
+The same move appears at paragraph scale: a one-sentence paragraph that restates
+the paragraph before it (*That is the real win.*, *Read that again.*, *Let that
+sink in.*), the same closer after several sections, a row of fragments (*No
+aesthetic prior. No nostalgia.*), or one word in all caps or split by periods
+(*every. single. day.*). The line asks the reader to pause on a claim instead of
+adding to it.
 
-**Repair:** End on the evidence and trust the reader to infer the theme.
+**Repair:** End on the evidence and trust the reader to infer the theme. Cut a
+closer that repeats. Merge a row of fragments into a sentence with a specific
+claim. One short sentence can carry emphasis when it carries a new fact.
+
+**Boundary:** Pattern 77 covers runs of same-shape fragments; this entry covers
+the closing position and the repeated closer. (Paragraph-scale forms adapted
+from humanize-writing v4.3.0, MIT.)
 
 ### 20. Even-rhythm paragraph
 
@@ -487,8 +494,8 @@ claims mastery the passage does not provide.
 
 ## Extended publication and social tells
 
-Use with [ai-ism-audit.md](ai-ism-audit.md) and
-[vocabulary-tiers.md](vocabulary-tiers.md). These extend the core 55 patterns
+Use with [vocabulary-tiers.md](vocabulary-tiers.md). These extend the core 55
+patterns
 with publication, social, and credibility shapes absorbed from
 avoid-ai-writing, hardikpandya/stop-slop, and blader/humanizer.
 Still contextual prompts, not authorship proof.
@@ -961,8 +968,7 @@ the specific surprise. Cut the wink and the stage business.
 
 **Carve-outs:** A writer whose established voice runs on these props keeps
 them; the register is a tell for imposed casualness, not a ban on playfulness.
-The deterministic detector covers only the mechanical props (six stage
-directions, four parentheticals, both closed lists). (Adapted from
+(Adapted from
 avoid-ai-writing v3.29.0, MIT.)
 
 ### 95. Dramatized contrast against the crowd
@@ -1204,12 +1210,8 @@ generally a good idea to*.
 The vocabulary catalog goes quiet once a draft has been cleaned, yet the draft
 can still read as machine-ordered. These patterns live above the sentence: they
 concern how the prose arranges and narrates its own argument. Because they are
-structural rather than lexical, a word-level detector misses them and a
-paragraph can score clean while every paragraph is built on the same scaffold.
-
-The deterministic subset is implemented in the sibling skill
-`ai-writing-detector` (`scripts/discourse.js`, `references/discourse-patterns.md`).
-These entries are the editorial layer; the detector flags, the writer decides.
+structural rather than lexical, a word-level check misses them and a
+paragraph can read clean while every paragraph is built on the same scaffold.
 
 ### 107. Announced-count enumeration
 
@@ -1255,8 +1257,6 @@ no evidence is weighed, and no dispute is settled.*
 orienting in a long technical document. One chapter-closing summary is a genre
 convention; three or four identical ones are the tell. The tell is the habit,
 not a single map.
-
-**Detector:** `discourse-metacommentary` in ai-writing-detector.
 
 ### 109. Evaluative pre-announcement ('worth' framing)
 
@@ -1324,8 +1324,6 @@ earlier sentence carry the contrast and state each definition positively.
 **Carve-outs:** Deliberate anaphora with persuasive force, and parallel
 structures a reader must compare item by item.
 
-**Detector:** `discourse-parallel-scaffold` in ai-writing-detector.
-
 ### 114. Imperative-consequence reveal
 
 **Tell:** A stage-managed imperative followed by the consequence as a flourish:
@@ -1345,8 +1343,138 @@ imperative (*Take a firm with c = 50, v = 50 and s = 50*), as do expository
 setups (*Suppose an economy produces steel*). The tell is the dramatic
 consequence, not the imperative.
 
-**Detector:** `discourse-imperative-reveal` in ai-writing-detector.
+## Merged staging and rhythm patterns: 115-117
 
-For before-and-after demonstrations, load [examples.md](examples.md). For tiered
-word replacements, load [vocabulary-tiers.md](vocabulary-tiers.md). For detect
-or edit modes and severity triage, load [ai-ism-audit.md](ai-ism-audit.md).
+These three staging and rhythm patterns came from `humanize-writing`
+v4.3.0, whose Section A and B patterns derive from Wikipedia's
+["Signs of AI writing"](https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing)
+(WikiProject AI Cleanup, CC BY-SA). They were absent from the numbered catalog
+above. Every other humanize-writing pattern already had an equivalent.
+
+### 115. The two-clause epigram
+
+**Tell:** A short sentence splits near the middle by a comma or semicolon into a
+setup and a punch, where the second half is a clipped verdict rather than a new
+clause: *The question is structural, so the answer has to be too.*, *But the
+negation is partial, and the limit decides the case.*, *The forms changed; the
+relation did not.*, *The market was never neutral, and it is not neutral now.*
+The second half usually echoes a word from the first with a negation, or matches
+it with a noun of the same weight, so the two halves balance. Repeated, it gives
+every paragraph the same closing drumbeat.
+
+**Repair:** State the claim once, in a clause with a real subject and something
+the reader did not already have. If the contrast is real, let each half carry
+content. If the sentence only restates the heading or the sentence before it,
+cut it and start on the substance. One balanced sentence in a long piece can be
+voice; making the shape the default is a rule.
+
+**Boundary:** Distinct from pattern 9 (a contrast), pattern 91 (a reversal
+landed on a bare auxiliary), and pattern 99 (repeated setup/reversal
+punchlines): here the tell is the balanced rhythm itself, repeated.
+
+**Before:**
+
+> The question is structural, so the answer has to be too. In the societies that
+> called themselves socialist, these things were true.
+
+**After:**
+
+> In the societies that called themselves socialist, these things were true.
+
+**Before (negated echo):**
+
+> The forms changed; the relation did not.
+
+**After:**
+
+> The forms changed while the wage relation survived.
+
+### 116. The one-sentence section opener
+
+**Tell:** A section or subsection opens with a single-sentence paragraph, then a
+blank line and the real content. Common shapes: a rhetorical question with a
+count (*If any of this is right, why did generations of socialists go on calling
+these societies socialist? Two structural things did the damage.*), a bare
+announcement of what follows (*Three answers have been on offer.*, *Three
+consequences follow.*), an isolated statement of the objection the section then
+answers, or a verdict the section then proves. The sentence is set apart to give
+it weight, and it usually announces structure instead of stating content.
+Sections that open this way tend to close on a matching one-line paragraph, so
+the substance sits between two bookends.
+
+**Repair:** Merge the opener into the paragraph it introduces, or replace it
+with the first real claim. Headings are the place for structure. Keep a
+one-sentence opening paragraph when it carries a fact, a number, or a
+distinction the reader can use on its own.
+
+**Boundary:** Broader than pattern 17 (topic-sentence paragraphs) and the
+"Fragmented headers" delivery check, which covers a one-line restatement
+directly beneath a heading.
+
+**Before:**
+
+> Three consequences follow.
+>
+> First, the classification was the mistake.
+
+**After:**
+
+> First, the classification was the mistake.
+
+**Before (isolated objection):**
+
+> The obvious objection is that a bureaucracy is a stratum, a layer of officials
+> who administer on behalf of someone else, not a class at all.
+>
+> Cliff ran the Stalinist bureaucracy against the class definitions of Lenin and
+> Bukharin and found that it satisfied every criterion.
+
+**After:**
+
+> Bureaucrats are usually treated as a stratum, officials who administer on
+> behalf of someone else rather than a class. Cliff ran the Stalinist
+> bureaucracy against the class definitions of Lenin and Bukharin and found that
+> it satisfied every criterion.
+
+### 117. The short declarative that opens a paragraph
+
+**Tell:** A paragraph or narrative stretch begins with a very short declarative
+sentence, usually under ten words, carrying no detail, with the evidence
+arriving next: *It began with soviet power rather than party decree.*, *Then the
+civil war and the collapse.*, *The promise was destroyed from within.*, *It
+didn't last.* Variants: a fragment as the first sentence, a transition sentence
+that only marks a topic change, a summary verdict placed before its evidence.
+The short opener stops the reader and promises a conclusion the rest of the
+paragraph then has to earn, so the point arrives twice, once as a beat and once
+as an argument. In a run, every paragraph gets the same shape.
+
+**Repair:** Merge the short sentence with the one that follows, so the detail
+leads or the claim and its support arrive together. Keep a short opening
+sentence when it states a fact the paragraph then explains, such as a date, a
+name, or a number (*The tendency didn't stop in 1945, or 1991, or 2008.*). One
+deliberate short opening in a long piece is voice; one in every paragraph is a
+rule.
+
+**Boundary:** Related to pattern 77 (staccato fragments) and pattern 20
+(even-rhythm paragraphs); here the tell is position and brevity together.
+
+**Before:**
+
+> It began with soviet power rather than party decree. In 1917 dual power between
+> the Provisional Government and the soviets gave way to a revolution whose
+> watchword was workers' councils.
+
+**After:**
+
+> In 1917 dual power between the Provisional Government and the soviets gave way
+> to a revolution whose watchword was workers' councils.
+
+**Before (fragment opener):**
+
+> Then the civil war and the collapse. War communism was an emergency rather than
+> a programme, and it produced famine, strikes, and the Kronstadt revolt.
+
+**After:**
+
+> The civil war and the collapse followed, and war communism was an emergency
+> rather than a programme: famine, strikes, and the Kronstadt revolt.

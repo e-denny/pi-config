@@ -1,0 +1,12 @@
+[
+  {
+    "timestamp": "2026-10-02T02:22:55.829Z",
+    "version": "1.0.0",
+    "kind": "uncaught_exception",
+    "message": "setRawMode EIO",
+    "stack": "Error: setRawMode EIO\n    at ReadStream.setRawMode (node:tty:103:24)\n    at ProcessTerminal.start (file:///home/edgar/.local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-2KTBZM5G.js:106:11306)\n    at TuiAltScreen.start (file:///home/edgar/.local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-2KTBZM5G.js:71:38933)\n    at Proxy.<anonymous> (file:///home/edgar/.local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-33XOIQ5N.js:951:2978)\n    at process.<anonymous> (file:///home/edgar/.local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-33XOIQ5N.js:978:1520)\n    at process.wrapper (node:events:639:12)\n    at process.emit (node:events:514:20)\n    at process.processEmit [as emit] (file:///home/edgar/.local/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/chunks/chunk-IBCPYVFK.js:3:15282)",
+    "sessionFile": "/home/edgar/.pi/agent/sessions/--home-edgar-Documents-llm-wiki--/2026-10-01T23-45-09-459Z_01a0f9db-8952-765b-bce4-9eb36297d688.jsonl",
+    "cwd": "/home/edgar/Documents/llm-wiki",
+    "notified": true
+  }
+]

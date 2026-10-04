@@ -1,26 +1,26 @@
 ---
 name: humanizer
-description: Humanize AI-sounding text with natural rewrites, voice preservation, editorial critique, and optional AI-ism audit modes. Use when prose sounds robotic, generic, or template-generated, when asked to rewrite, clean up, de-slop, or critique text, or to strip AI tells without changing facts, claims, or the writer's voice.
+description: Two-step humanizer. Step 1 scans every sentence, paragraph, and passage for AI tells and writing patterns, then reports each finding with its count and locations and waits for approval. Step 2 fixes or rewrites the approved findings. Use when prose sounds robotic, generic, or template-generated, when asked to audit, de-slop, rewrite, or clean up text, or to strip AI tells without changing facts, claims, or the writer's voice.
 license: MIT
 metadata:
-  version: 1.7.3
+  version: 2.0.0
   category: writing
-  related_skills:
-    - simple-english
-    - ai-writing-detector
-    - writing-prose
-    - writing-voice
 ---
 
 # Humanizer
 
 Make text sound natural, specific, and true to its writer. Improve the writing.
-When asked to chase detectors, reduce mechanical tells and hosted scores without
-manufacturing a fake person, inventing facts, or leaking a confidential draft.
+Reducing mechanical tells never justifies manufacturing a fake person,
+inventing facts, or leaking a confidential draft.
 
-**Pi register: Human.** Other humans: READMEs, changelogs, public posts, OSS
-issues and PR comments. PR bodies bounce to `simple-english`. Chat with the primary user
-loads neither skill.
+This skill runs in two steps:
+
+1. **Detect.** Scan every unit of the text for patterns and AI tells. Produce a
+   report that itemizes each finding, its count, and its locations. Then
+   **stop** and wait for approval.
+2. **Fix.** Rewrite only the approved findings, then report what changed.
+
+Never edit during step 1. Never start step 2 without approval.
 
 ## Establish the brief
 
@@ -32,82 +32,117 @@ If no text is provided, ask for it. Ask one brief question only when missing
 context would materially change the result; otherwise make the smallest safe
 assumption and proceed.
 
-## Voice hierarchy
-
-Resolve voice decisions in this order:
-
-1. The user's explicit brief or supplied writing sample.
-2. The medium, audience, purpose, and surrounding text.
-3. The source writer's stable choices and deliberate rough edges.
-4. Generic house rules and pattern catalogs.
-
-The higher layer wins when two layers conflict. Plain-language guidance is a
-clarity floor, not a replacement personality. A contraction, long sentence,
-repeated word, or unusual rhythm can stay when it fits the writer and carries
-the thought better than the mechanically cleaner alternative.
-
-## Choose the depth
-
-- **Cleanup:** Fix local stiffness, filler, repetition, and response residue.
-- **Rewrite:** Rebuild sentences and paragraphs while preserving every claim.
-  Keep information, not paragraph count or original shape.
-- **Voice match:** Follow a supplied sample or clear voice brief. The sample
-  outranks generic house style rules when they conflict.
-- **Critique:** Diagnose the strongest problems and recommend repairs without
-  rewriting.
-- **Detect:** Flag AI-isms only; group by severity; no rewrite.
-- **Chase:** After the editorial rewrite, run sibling `ai-writing-detector`
-  analyze. Optionally run its hosted spread tester when the user consents to
-  upload. Use at most two editing passes total: the initial rewrite and one
-  corrective pass. A preservation repair shares that budget. Stop early when no
-  justified in-scope edit remains; report passes used, residuals, and stop reason.
-  A no-op uses zero passes. Scores are loop input, never an authorship verdict.
-  Read both the lexical `score` and the detector's `discourse` block
-  (argument-architecture signals; `combined_score` folds them). A low `score`
-  with a high `discourse.score` is not a clean draft. The deterministic
-  counterparts of pattern-catalog 107-114 live there.
-- **Edit:** Minimal in-place fixes on a named file; leave clean spans alone.
-- **Embedded:** When this skill is one step inside a larger job (PR body, commit
-  message, doc step), return only the final prose. No draft dump, no audit
-  ceremony.
-
-Use the lightest intervention that solves the request. Default is rewrite or
-cleanup. Trigger detect on audit/scan/flag-only language. Trigger chase on
-"pass the detector", "lower the score", "chase GPTZero", or equivalent.
-Trigger edit when the user names a file and wants it changed in place. Trigger
-embedded when another task only needs the cleaned text.
+Use the lightest intervention that solves the request. The two-step sequence
+applies to every humanizing request. If the user wants detection only, stop
+after step 1. Skip the report and the wait only when the user explicitly
+declines it, and then say which findings you acted on.
 
 ## Load the right reference
 
-- Read [references/humanizing-text.md](references/humanizing-text.md) for full
-  rewrites, voice or tone work, audience adaptation, fiction, dialogue, and
-  long-form editing. It is the main structure for humanizing text.
-- Read [references/pattern-catalog.md](references/pattern-catalog.md) for a
-  systematic audit, stubborn draft, or detailed diagnosis of recurring writing
-  patterns. Use patterns as editorial prompts, never proof of authorship.
-- Read [references/vocabulary-tiers.md](references/vocabulary-tiers.md) for
-  tiered word and phrase replacements during cleanup or dense corporate prose.
-- Read [references/ai-ism-audit.md](references/ai-ism-audit.md) for detect/edit
-  modes, severity triage, context and voice profiles, output packages, and
-  extended tells beyond the core catalog.
-- Read [references/required-checks.md](references/required-checks.md) after a
-  rewrite for a silent post-edit QA pass (register, facts, regularity, stance,
-  plus the stop-slop revision gate when the piece still feels flat).
+- Read [references/ai-tells.md](references/ai-tells.md) as the main
+  reference: the full catalog of tells with `BAD` / `GOOD` pairs, ordered from
+  substance down to diction. It drives detection and supplies the repair
+  pattern for each finding.
+- Read [references/pattern-catalog.md](references/pattern-catalog.md) for the
+  numbered patterns and a systematic audit, stubborn draft, or detailed
+  diagnosis of recurring writing patterns. Use patterns as editorial prompts,
+  never proof of authorship.
+- Read [references/vocabulary-tiers.md](references/vocabulary-tiers.md) for the
+  step 2 word and phrase swaps on dense or corporate prose.
 - Read [references/long-form-diagnostics.md](references/long-form-diagnostics.md)
-  only when required checks are not enough for a longer piece.
-- Read [references/provenance.md](references/provenance.md) when authorship or
-  high-stakes integrity is in play; style checks do not prove authorship.
-- Read [references/examples.md](references/examples.md) when contrastive examples
-  would improve calibration.
-- For engineer-facing docs, PR text, errors, or STE form control, use the sibling
-  skill `simple-english` instead of forcing humanizer voice rules onto STE.
-- For mechanical AI-writing **scores**, hosted detector spread, or rewrite
-  preservation validate, use sibling skill `ai-writing-detector`. Chase mode
-  in this skill consumes those scores. It does not replace the detector.
+  when the piece is long, for the whole-piece scan in step 1.
 
-Load only what the task needs.
+Load only what the task needs: `ai-tells.md` and `pattern-catalog.md` are the
+step 1 checklists; `long-form-diagnostics.md` covers whole-piece shape;
+`vocabulary-tiers.md` serves step 2 word swaps.
 
-## Edit
+## Step 1: detect and report
+
+Scan the whole text, without sampling:
+
+1. **Whole piece.** Stance, sourcing, structure, opening and ending, and
+   long-form regularity (argument-architecture patterns 107-114 and
+   `long-form-diagnostics.md`).
+2. **Paragraph.** Shape, rhythm, point of view, and list and formatting tells.
+3. **Sentence.** Every sentence, matched against the `ai-tells.md` categories
+   and the numbered `pattern-catalog.md` patterns.
+4. **Phrase and word.** Diction, cliché, and inflated vocabulary from the tier
+   tables.
+
+**What counts as a finding.** A tell that materially weakens the draft at that
+location, after checking pass conditions, carve-outs, register, and context.
+Report the pattern, not every near-miss: a single instance of a repeat-based
+tell (clause welding, uniform openers, epigrams) is not a finding until it
+recurs. A pattern match is never proof of authorship. Do not report a tell
+where a genre, register, house style, or voice sample makes it intentional.
+
+**Locators.** Use block and sentence indices plus a short anchor, so a location
+survives edits:
+
+- `¶n`: the nth content block in reading order (paragraph, heading, list,
+  table, quote).
+- `¶n.Sm`: the mth sentence of block n; `¶n.ik` for item k of a list.
+- Append a 3-6 word quoted anchor: `¶4.S2: "the key takeaway is"`.
+
+**Protected content.** Quoted or attributed text, code, tables, URLs, paths,
+identifiers, frontmatter, and phrases being discussed as examples get detected
+and reported, but marked `[protected]` with no planned rewrite.
+
+**Report.** Group findings by priority, then list them:
+
+- **High**: substance, stance, sourcing, or an argument-level tell.
+- **Medium**: structure, rhythm, repetition, or paragraph shape.
+- **Low**: diction, clichés, punctuation, or polish.
+
+For each priority group, a table:
+
+| ID | Tell / pattern | Locations | Count | Planned fix |
+| --- | --- | --- | --- | --- |
+| 1 | Pattern 19: thematic restatement ending | `¶2.S3: "That's the real win"`; `¶9.S1: "Read that again"` | 2 | Cut the closer; end on the evidence. |
+| 2 | Clichéd metaphor | `¶5.S1: "evolving landscape"` | 1 | Replace with the literal fact. |
+
+Continue IDs across groups. `Count` is the number of detection sites for that
+tell. Close with a summary: totals, the protected findings, and anything
+ambiguous or blocked for lack of a source fact.
+
+Deliver the report in chat. If the source is a file, or the report would be
+long, also save it as `<source>.humanize-report.md` and say where.
+
+## Approval gate
+
+After the report, stop. Ask whether to fix all findings, a subset (list the
+IDs), or none, and whether to change scope. Then wait for the reply. Silence is
+not approval. Answer questions about the report, then ask again. Do not begin
+step 2 until the user approves.
+
+## Step 2: fix approved findings
+
+Work from the approved report, in priority order:
+
+1. **Meaning and evidence first, then structure, then rhythm, then diction.**
+   Fix every site listed for an approved ID, including repeats the fix removes.
+2. **Smallest faithful repair.** Remove the tell without changing a claim,
+   quantity, condition, or attribution. A vague sentence gets the concrete fact
+   already in the source, or stays and is flagged.
+3. **Respect the report's scope.** Do not rewrite spans outside the approved
+   IDs. If a repair unavoidably touches an adjacent clause, keep the change
+   minimal. If an approved fix turns out to be a false positive in context,
+   leave the text and mark it `no-op`.
+4. **Blocked fixes.** Protected spans, and fixes that need a missing source
+   fact, are left unchanged and reported as `blocked`.
+
+Apply the fix rules below throughout. After the approved items are done, re-read
+once for new tells the edits introduced and fix those within scope.
+
+**Completion report.** Return the revised text, then a compact status table:
+
+| ID | Status | Note |
+| --- | --- | --- |
+| 1 | fixed | |
+
+Use `fixed`, `no-op`, or `blocked`. Mark `blocked` items with what they need.
+
+## Fix rules
 
 1. Preserve every claim, evidence, uncertainty, and recognizable voice from the
    source. Keep the information, not the original paragraph count or outline
@@ -128,11 +163,12 @@ Load only what the task needs.
    how the destination renders single newlines; unwrap accidental hard wraps
    only when they remain visible, and preserve intentional line breaks.
 9. On a full rewrite package, re-read once for leftover tells before delivery.
-10. For substantial rewrites, run the silent required-checks pass. Add long-form
-    diagnostics only when the piece is long and still feels modular or metronomic.
+10. For substantial rewrites, run a silent post-edit pass: check register, facts,
+    rhythm regularity, and stance against the source. Add long-form diagnostics
+    only when the piece is long and still feels modular or metronomic.
 11. Separate a pattern match from an actionable finding: check pass conditions,
-    context, and meaning first, then edit only within the mode and scope the writer
-    authorized. Ordinary cleanup preserves structure and argument; substantial
+    context, and meaning first, then fix only findings approved in the report.
+    Ordinary cleanup preserves structure and argument; substantial
     restructuring needs clear scope.
 12. Keep edits source-faithful. Preserve attribution, quantities, conditions,
     causality, negation, and uncertainty; flag missing support instead of filling
@@ -160,8 +196,8 @@ Load only what the task needs.
 
 - Do not treat polished grammar, a dash, a triad, passive voice, a tier-list hit,
   or any single feature as inherently artificial or as proof of authorship.
-- Prefer provenance over surface style when authorship claims matter; see
-  [provenance.md](references/provenance.md).
+- Prefer provenance over surface style when authorship claims matter; style
+  checks do not prove authorship.
 - Prefer plain Tier 1A substitutes when they fit; treat Tier 1B hits as clarity
   edits, not authorship evidence ([vocabulary-tiers.md](references/vocabulary-tiers.md)).
 - Preserve intentional rhetoric, genre conventions, accessibility, and house
@@ -176,8 +212,8 @@ Load only what the task needs.
 - Do not flatten necessary technical precision or evidence-based qualification.
 - Do not optimize for visible variation. Sentence-length variety, fragments,
   contractions, and asymmetry are tools, not proof that prose is human.
-- Do not impose hard punctuation quotas, mandatory first person, or detector
-  score targets. Judge in context. A supplied writing sample outranks generic
+- Do not impose hard punctuation quotas or mandatory first person. Judge in
+  context. A supplied writing sample outranks generic
   style defaults (including dash habits): match the sample's frequency instead
   of scrubbing a fingerprint the author uses on purpose.
 - When a house style or guide permits deliberate dashes, still flag em-dash
@@ -190,7 +226,7 @@ Load only what the task needs.
   swap an odd specific for a generic one.
 - Do not modernize historical prose into a newer voice.
 - Low-variance formulaic prose can be a real writer's natural voice, including
-  autistic or ADHD cadence. Do not flag burstiness alone.
+  autistic or ADHD cadence. Do not flag low variation alone.
 - Preserve force-bearing "never", "must", and "all" exactly in safety,
   security, legal, and technical rules. Do not upgrade approximations
   ("about 50%" stays "about 50%"). Keep both bounds of ranges. Do not drop
@@ -208,8 +244,7 @@ Load only what the task needs.
   passage.
 - Same-genre samples only for lasting voice-match. Surface low confidence
   when samples are thin or cross-genre. Never auto-approve AI-suspect
-  samples into a profile (that loop lives in `writing-voice`
-  `voice-from-samples.md`).
+  samples into a voice profile.
 
 ### Never inject these
 
@@ -237,39 +272,4 @@ None of the following may be **added** to text that did not already contain it:
 
 **Test:** for each edit, ask whether the information came from the source.
 Subtraction and sharpening are in scope. Addition of stance, personality, or
-fact is not. After a Voice match, write 5 to 10 hypotheses on sentence
-length, word level, openers, punctuation tics, recurring phrases, and
-transitions, then match those. Do not only strip AI tells.
-
-### Fingerprint gate (keep, ask, never inject)
-
-On LinkedIn and other high-trust social, a draft is incomplete without these
-when the brief can supply them:
-
-- one odd-precision number with a named referent
-- one named entity
-- one first-person sensory detail already in the source
-- one dated uncomfortable fact stated flat, with no candor frame
-
-If the source has them, keep them. If the brief needs them and they are
-missing, ask. Never invent them to look human or to move a detector score.
-
-## Deliver
-
-Follow the requested format. If none is given:
-
-- For a rewrite, return the revised text first. Add a note only for a material
-  choice, ambiguity, or factual concern. Do not dump the required-checks audit
-  unless asked.
-- For a critique or detect pass, name the strongest clusters, cite short
-  examples, rank by severity when useful, and prescribe specific repairs.
-- For edit mode, report spans changed and verification, including any protected,
-  source-blocked, pass-limit, or verification residual.
-
-- For embedded use inside another task, return only the final prose.
-- For a mixed request, give a compact diagnosis followed by the rewrite.
-- For an explicit full audit package, use the sectioned layout in
-  [ai-ism-audit.md](references/ai-ism-audit.md).
-
-Return only what helps the user. Do not add generic offers or commentary around
-a clean rewrite.
+fact is not. 

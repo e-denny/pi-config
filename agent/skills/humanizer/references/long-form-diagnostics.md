@@ -2,8 +2,8 @@
 
 # Optional long-form diagnostics
 
-Use these only when [required-checks.md](required-checks.md) is not enough for a
-longer piece. They are fallback heuristics, not targets to optimize for.
+Use these only when the main post-edit pass is not enough for a longer piece.
+They are fallback heuristics, not targets to optimize for.
 
 - **Paragraph spread.** Count sentences in each paragraph. If nearly all land at
   the same count, vary one.

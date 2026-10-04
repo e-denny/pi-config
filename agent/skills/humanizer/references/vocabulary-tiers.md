@@ -308,5 +308,5 @@ Say why something matters instead of a generic thumbs-up.
 Tables and tier logic follow avoid-ai-writing v3.22.3 (Tier 1A/1B split) and
 brandonwise/humanizer-influenced tiering; the abstract-metaphor-nouns table
 absorbs cursor/plugins unslop (tip@99559f2). Keep this file as a rewrite aid. The
-main diagnosis path remains [pattern-catalog.md](pattern-catalog.md) and the
-editing sequence in [humanizing-text.md](humanizing-text.md).
+main diagnosis path remains [pattern-catalog.md](pattern-catalog.md); the rewrite
+reference is [ai-tells.md](ai-tells.md).
