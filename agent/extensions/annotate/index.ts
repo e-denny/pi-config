@@ -238,6 +238,7 @@ export default function annotateExtension(pi: ExtensionAPI) {
       }
 
       const command = [
+        `ANNOTATE_FILE=${shellQuote(target)}`,
         "nvim",
         "-c",
         shellQuote(`set rtp^=${nvimDir}`),
