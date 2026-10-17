@@ -6,8 +6,5 @@
   "defaultThinkingLevel": "high",
   "packages": [
     "npm:pi-web-access"
-  ],
-  "extensions": [
-    "+extensions/pi-handoff/index.ts"
   ]
 }
