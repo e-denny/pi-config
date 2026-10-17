@@ -9,14 +9,13 @@
  * When Neovim exits, the tab is closed and the sidecar is sent to the agent as
  * a user message so it can apply the feedback.
  *
- * The Neovim half lives in `./nvim` and is loaded with `-c 'set rtp^=…'`, so it
- * does not have to be installed into the user's Neovim configuration.
+ * The Neovim half is `e-denny/annotate.nvim`, installed by lazy.nvim, and is
+ * loaded with `-c 'set rtp^=…'` from that checkout.
  */
 
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
@@ -28,23 +27,18 @@ const SOURCE_LINE = /^<!--\s*annotate:source\b/;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function extensionDir(): string {
-  const candidates: string[] = [];
-  try {
-    candidates.push(path.dirname(fileURLToPath(import.meta.url)));
-  } catch {
-    // ignore: not available under every loader
-  }
-  candidates.push(path.join(os.homedir(), ".pi", "agent", "extensions", "annotate"));
-  for (const dir of candidates) {
-    if (dir && fs.existsSync(path.join(dir, "nvim", "lua", "annotate", "init.lua"))) {
-      return dir;
-    }
-  }
-  return candidates[0] ?? path.join(os.homedir(), ".pi", "agent", "extensions", "annotate");
+/**
+ * The lazy.nvim checkout of e-denny/annotate.nvim. This is the canonical copy
+ * of the Neovim plugin; the extension does not bundle its own.
+ */
+function nvimPluginDir(): string {
+  const dataHome = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
+  return path.join(dataHome, "nvim", "lazy", "annotate.nvim");
 }
 
-const NVIM_DIR = path.join(extensionDir(), "nvim");
+function nvimPluginMissing(dir: string): boolean {
+  return !fs.existsSync(path.join(dir, "lua", "annotate", "init.lua"));
+}
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
@@ -214,6 +208,15 @@ export default function annotateExtension(pi: ExtensionAPI) {
         return;
       }
 
+      const nvimDir = nvimPluginDir();
+      if (nvimPluginMissing(nvimDir)) {
+        ctx.ui.notify(
+          "annotate: annotate.nvim is not installed — add 'e-denny/annotate.nvim' to your lazy.nvim config and run :Lazy install",
+          "error",
+        );
+        return;
+      }
+
       const commentsPath = commentsPathFor(target);
       const dir = path.dirname(target);
       const name = path.basename(target);
@@ -237,7 +240,7 @@ export default function annotateExtension(pi: ExtensionAPI) {
       const command = [
         "nvim",
         "-c",
-        shellQuote(`set rtp^=${NVIM_DIR}`),
+        shellQuote(`set rtp^=${nvimDir}`),
         "-c",
         shellQuote('lua require("annotate").setup()'),
         shellQuote(target),

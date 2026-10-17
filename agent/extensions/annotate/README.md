@@ -107,12 +107,17 @@ working directory, or absolute; `~` is expanded).
 * `index.ts` — the Pi extension: registers `/annotate`, opens the Herdr tab,
   waits for Neovim to exit, closes the tab, and sends the sidecar as a user
   message.
-* `nvim/lua/annotate/init.lua` — the Neovim plugin: layout, keymaps,
-  highlighting, box rendering, sidecar bookkeeping.
+* The Neovim half is a separate plugin,
+  [`e-denny/annotate.nvim`](https://github.com/e-denny/annotate.nvim), installed
+  by lazy.nvim (layout, keymaps, highlighting, box rendering, sidecar
+  bookkeeping).
 
-The plugin is loaded with `nvim -c 'set rtp^=…/annotate/nvim' -c
-'lua require("annotate").setup()'`, so nothing has to be installed into your
-Neovim configuration, and the plugin is only active in sessions Pi started.
+The command loads the plugin from its lazy checkout with `nvim -c 'set
+rtp^=<data>/nvim/lazy/annotate.nvim' -c 'lua require("annotate").setup()'`. The
+checkout is resolved from `$XDG_DATA_HOME/nvim` (default `~/.local/share/nvim`),
+so the plugin does not have to be added to your Neovim configuration, and it is
+only active in sessions Pi started. If the plugin is missing, `/annotate` reports
+that it needs to be added to your lazy.nvim config first.
 
 Waiting is done by polling Herdr's pane foreground process, so closing the tab
 or quitting Neovim by any means is detected.
