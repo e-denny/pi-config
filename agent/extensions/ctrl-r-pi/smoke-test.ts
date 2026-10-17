@@ -31,6 +31,14 @@ function createFakePi() {
 		registerShortcut(_key: string, options: typeof shortcut) {
 			shortcut = options;
 		},
+		// What pi's `getCommands()` lists: extension commands, prompt templates,
+		// and skills. Built-in TUI commands are deliberately absent.
+		getCommands: () => [
+			{ name: "annotate", source: "extension" },
+			{ name: "handoff", source: "extension" },
+			{ name: "skill:release", source: "skill" },
+			{ name: "tpl", source: "prompt" },
+		],
 	};
 	return {
 		pi: pi as never,
@@ -48,17 +56,20 @@ const { pi, handlers, getShortcut } = createFakePi();
 extension.default(pi);
 
 // --- capture, de-duplication, skips ---------------------------------------
+// The input event path sees what pi delivered as a prompt: plain prompts, skills
+// and prompt templates (both before expansion), RPC prompts, and free text that
+// merely starts with "/". Built-in commands never get here.
 handlers.session_start?.({ type: "session_start" });
 handlers.input?.({ type: "input", text: "first prompt", source: "interactive" });
 handlers.input?.({ type: "input", text: "second prompt", source: "interactive" });
 handlers.input?.({ type: "input", text: "first prompt", source: "interactive" });
-handlers.input?.({ type: "input", text: "/model", source: "interactive" });
+handlers.input?.({ type: "input", text: "/nope free text", source: "interactive" });
 handlers.input?.({ type: "input", text: "from another extension", source: "extension" });
 
 assert.deepEqual(
 	readPrompts(),
-	["/model", "first prompt", "second prompt"],
-	"dedupe, most-recent-first, slash commands kept, extension prompts skipped",
+	["/nope free text", "first prompt", "second prompt"],
+	"dedupe, most-recent-first, and extension-originated prompts skipped",
 );
 
 // --- command capture through the editor hook --------------------------------
@@ -102,6 +113,28 @@ assert.equal(
 );
 assert.deepEqual(forwarded, ["/annotate notes.md"], "pi's own submit handler still runs");
 
+// Built-in TUI commands are pi's own: no input event, no model, no history. The
+// editor hook is the only place they could have leaked in from.
+const beforeBuiltins = readPrompts();
+wrappedEditor.onSubmit("/quit");
+wrappedEditor.onSubmit("/model sonnet");
+assert.deepEqual(readPrompts(), beforeBuiltins, "built-in commands are not recorded");
+assert.deepEqual(
+	forwarded.slice(-2),
+	["/quit", "/model sonnet"],
+	"built-ins are still handed to pi",
+);
+
+// Free text that names no command is a prompt, not a built-in: the editor hook
+// leaves it to the input event, which is the hook that sees it in practice.
+const beforeFreeText = readPrompts();
+wrappedEditor.onSubmit("/nope also free text");
+assert.deepEqual(
+	readPrompts(),
+	beforeFreeText,
+	"the editor hook leaves free text to the input event",
+);
+
 // An extension that replaces the editor later takes the wrapper with it; the
 // next input reinstalls it, chaining the replacement instead of discarding it.
 const foreignEditor = {} as { onSubmit?: (text: string) => void };
@@ -114,8 +147,8 @@ const healedEditor = installedFactory!(null, null, null) as unknown as {
 };
 assert.equal(healedEditor, foreignEditor, "the replacement editor is kept, not replaced");
 healedEditor.onSubmit = (text: string) => forwarded.push(text);
-healedEditor.onSubmit("/handoff now");
-assert.equal(readPrompts()[0], "/handoff now", "commands work again after a self-heal");
+healedEditor.onSubmit("/handoff after-heal");
+assert.equal(readPrompts()[0], "/handoff after-heal", "commands work again after a self-heal");
 
 // A keystroke is the last chance before the Enter that submits it: an editor
 // installed after the session_start timer (pi-prompt-box does this) is
@@ -129,8 +162,19 @@ const restickiedEditor = installedFactory!(null, null, null) as unknown as {
 };
 assert.equal(restickiedEditor, laterEditor, "a keystroke re-wraps a replaced editor");
 restickiedEditor.onSubmit = (text: string) => forwarded.push(text);
-restickiedEditor.onSubmit("/quit");
-assert.equal(readPrompts()[0], "/quit", "commands are captured again after a keystroke");
+restickiedEditor.onSubmit("/annotate after-keystroke.md");
+assert.equal(
+	readPrompts()[0],
+	"/annotate after-keystroke.md",
+	"commands are captured again after a keystroke",
+);
+const beforeBuiltinAfterHeal = readPrompts();
+restickiedEditor.onSubmit("/settings");
+assert.deepEqual(
+	readPrompts(),
+	beforeBuiltinAfterHeal,
+	"a built-in is still skipped after a self-heal",
+);
 
 // The input event reports the same submission for skills and plain prompts;
 // dedupe keeps one entry and skips the redundant second write.

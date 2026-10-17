@@ -31,17 +31,27 @@ Kitty/modifyOtherKeys support, or change the binding back to `Key.ctrl("r")` in
 Extension-originated messages (for example `pi.sendUserMessage` from another
 extension) are not recorded.
 
-Slash commands **are** recorded, including commands that never reach the agent:
-skills (`/skill:name`), prompt templates (`/tpl`), registered extension commands
-(`/annotate notes.md`, `/handoff`), and built-in TUI commands (`/quit`,
-`/settings`). Recalling one and pressing Enter runs it again.
+Slash commands **are** recorded, as long as pi knows them: skills
+(`/skill:name`), prompt templates (`/tpl`), and registered extension commands
+(`/annotate notes.md`, `/handoff`). Recalling one and pressing Enter runs it
+again.
+
+Built-in TUI commands (`/quit`, `/settings`, `/model`, `/resume`, ...) are **not**
+recorded: they are pi's own interface, not prompts sent anywhere. pi's
+`getCommands()` lists extension commands, prompt templates, and skills but no
+built-ins, which is what separates the two. Free text that merely starts with
+`/` and names nothing is a prompt for the model, and is still recorded (through
+the `input` event).
 
 Capturing commands takes two hooks, because no single pi event sees all of them:
 
 | Hook | Sees |
 |---|---|
-| `input` event | plain prompts, skills, prompt templates (interactive and RPC) |
-| editor `onSubmit` | *every* submission from the prompt box, commands included |
+| `input` event | plain prompts, skills, prompt templates, free text starting with `/` (interactive and RPC) |
+| editor `onSubmit` | *every* submission from the prompt box, built-in commands included |
+
+The editor hook decides what to keep: prompts, and commands pi knows. Built-ins
+are dropped there, which is the only place they can be seen at all.
 
 The editor hook wraps whatever editor is in use — including a custom one from
 another extension (a vim editor, a reworked prompt box) — instead of replacing

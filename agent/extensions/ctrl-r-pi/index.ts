@@ -8,6 +8,8 @@
  * Behavior:
  * - Every line submitted from the prompt box is stored, slash commands
  *   included: recalling `/annotate notes.md` and pressing Enter runs it again.
+ * - Built-in TUI commands (`/quit`, `/settings`, `/model`, ...) are not stored;
+ *   they are pi's own, not prompts that were sent anywhere.
  * - Prompts from RPC (not interactive, not extension-originated) are stored too.
  * - Prompts are de-duplicated: resubmitting one moves it to the top.
  * - History is persisted to <agent dir>/ctrl-r-pi-history.json and survives
@@ -438,6 +440,29 @@ export default function ctrlRPiExtension(pi: ExtensionAPI) {
 	}
 
 	/**
+	 * Whether a submitted line is worth remembering: a prompt, or a command pi
+	 * knows (`/annotate`, `/skill:name`, `/tpl`).
+	 *
+	 * Built-in TUI commands (`/quit`, `/settings`, `/model`, ...) are left out:
+	 * they are handled by the editor's own submit handler and never appear in
+	 * `getCommands()`, which lists extension commands, prompt templates, and
+	 * skills only. Free text that merely starts with "/" is a prompt for the
+	 * model, and reaches the history through the `input` event below.
+	 */
+	function isRecordableSubmission(text: string): boolean {
+		const prompt = text.trim();
+		if (!prompt.startsWith("/")) return true;
+
+		// Without a command list there is no way to tell a built-in from a
+		// command, so fall back to recording everything.
+		const commands = typeof pi.getCommands === "function" ? pi.getCommands() : undefined;
+		if (!commands) return true;
+
+		const name = prompt.slice(1).split(/\s+/, 1)[0] ?? "";
+		return commands.some((command) => command.name === name);
+	}
+
+	/**
 	 * Record every line submitted from the prompt box, commands included.
 	 *
 	 * `input` events never see a slash command: pi runs registered extension
@@ -469,6 +494,8 @@ export default function ctrlRPiExtension(pi: ExtensionAPI) {
 
 			// pi assigns `editor.onSubmit` after the factory returns, so a setter
 			// captures the real handler; the getter hands back the wrapped one.
+			// Built-in commands are filtered here, so the one place that sees them
+			// is also the one place that can leave them out.
 			let submit: ((text: string) => void) | undefined;
 			Object.defineProperty(editor, "onSubmit", {
 				configurable: true,
@@ -476,7 +503,7 @@ export default function ctrlRPiExtension(pi: ExtensionAPI) {
 				get: () => submit,
 				set: (handler: (text: string) => void) => {
 					submit = (text: string) => {
-						rememberPrompt(text);
+						if (isRecordableSubmission(text)) rememberPrompt(text);
 						handler(text);
 					};
 				},
