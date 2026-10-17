@@ -6,7 +6,8 @@ fuzzy-filter, and press Enter to put the selected prompt back in the editor.
 
 ## Behavior
 
-- Remembers the last **400 unique** prompts submitted to pi.
+- Remembers the last **400 unique** lines submitted to pi (prompts and slash
+  commands alike).
 - De-duplicates: resubmitting a prompt moves it to the top of the list.
 - Persists across sessions in `~/.pi/agent/ctrl-r-pi-history.json`.
 - Each list entry is collapsed to a single line and truncated to the popup width.
@@ -28,7 +29,33 @@ Kitty/modifyOtherKeys support, or change the binding back to `Key.ctrl("r")` in
 `index.ts`.
 
 Extension-originated messages (for example `pi.sendUserMessage` from another
-extension) and slash commands are not recorded.
+extension) are not recorded.
+
+Slash commands **are** recorded, including commands that never reach the agent:
+skills (`/skill:name`), prompt templates (`/tpl`), registered extension commands
+(`/annotate notes.md`, `/handoff`), and built-in TUI commands (`/quit`,
+`/settings`). Recalling one and pressing Enter runs it again.
+
+Capturing commands takes two hooks, because no single pi event sees all of them:
+
+| Hook | Sees |
+|---|---|
+| `input` event | plain prompts, skills, prompt templates (interactive and RPC) |
+| editor `onSubmit` | *every* submission from the prompt box, commands included |
+
+The editor hook wraps whatever editor is in use — including a custom one from
+another extension (a vim editor, a reworked prompt box) — instead of replacing
+it, so that editor keeps working and merely gets recorded through.
+
+Only one editor component can be installed at a time, and a later extension
+wins, so the wrapper is re-checked whenever it might have been displaced: just
+after the other `session_start` handlers have run, on every key you type, and on
+every input event. A keystroke matters because it arrives before the Enter that
+submits it, so a command typed right after another extension claimed the editor
+is still recorded.
+
+A prompt submitted interactively is seen by both hooks; de-duplication makes the
+second sighting a no-op, so the list and the file get one entry.
 
 ## Usage
 

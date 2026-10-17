@@ -6,7 +6,9 @@
  * (capital R, i.e. Ctrl-Shift-R).
  *
  * Behavior:
- * - Every user prompt (interactive or RPC, not extension-originated) is stored.
+ * - Every line submitted from the prompt box is stored, slash commands
+ *   included: recalling `/annotate notes.md` and pressing Enter runs it again.
+ * - Prompts from RPC (not interactive, not extension-originated) are stored too.
  * - Prompts are de-duplicated: resubmitting one moves it to the top.
  * - History is persisted to <agent dir>/ctrl-r-pi-history.json and survives
  *   across sessions.
@@ -21,6 +23,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import {
+	CustomEditor,
 	type ExtensionAPI,
 	type ExtensionContext,
 	getAgentDir,
@@ -28,6 +31,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import {
 	type Component,
+	type EditorComponent,
 	Container,
 	type Focusable,
 	fuzzyFilter,
@@ -47,6 +51,13 @@ import {
 } from "@earendil-works/pi-tui";
 
 const MAX_HISTORY = 400;
+
+/**
+ * The factory type accepted by `ctx.ui.setEditorComponent()`. Derived from the
+ * API rather than imported: the host package exports the interface method that
+ * takes it, but not the alias for the factory itself.
+ */
+type EditorFactory = NonNullable<Parameters<ExtensionContext["ui"]["setEditorComponent"]>[0]>;
 /** Candidates shown at once. The popup never grows past this many list rows. */
 const MAX_VISIBLE = 10;
 /** List row reserved for the "(n/m)" scroll indicator. */
@@ -402,12 +413,21 @@ async function showPromptHistory(
 
 export default function ctrlRPiExtension(pi: ExtensionAPI) {
 	let history: string[] = [];
+	/** The factory this extension installed, to tell whether it is still active. */
+	let installedFactory: EditorFactory | undefined;
 
+	/**
+	 * Remember one submitted line. Slash commands are kept: restoring one to the
+	 * editor and pressing Enter runs it again, exactly like the original entry.
+	 *
+	 * Interactive prompts arrive twice, from the editor hook and then from the
+	 * input event; the newest entry is already at the top by then, so that second
+	 * call is a no-op instead of a second write.
+	 */
 	function rememberPrompt(text: string): void {
 		const prompt = text.trim();
 		if (!prompt) return;
-		// Slash commands are commands, not prompts; they cannot be re-inserted as one.
-		if (prompt.startsWith("/")) return;
+		if (history[0] === prompt) return;
 
 		const existing = history.indexOf(prompt);
 		if (existing !== -1) history.splice(existing, 1);
@@ -417,14 +437,82 @@ export default function ctrlRPiExtension(pi: ExtensionAPI) {
 		saveHistory(history);
 	}
 
-	pi.on("session_start", () => {
+	/**
+	 * Record every line submitted from the prompt box, commands included.
+	 *
+	 * `input` events never see a slash command: pi runs registered extension
+	 * commands before the input event fires (`/annotate`, `/handoff`, ...), and
+	 * built-in TUI commands (`/quit`, `/settings`, ...) are handled by the
+	 * editor's submit handler without reaching the session at all. The editor's
+	 * `onSubmit` callback is the only point that sees every submission, so wrap
+	 * whichever editor is in use and record there.
+	 *
+	 * Wrapping rather than replacing keeps other editors working: the factory
+	 * chains whatever was configured before it (a vim-mode editor, a reworked
+	 * prompt box), and the accessor below leaves the callback pi assigns intact.
+	 *
+	 * Only one editor component can be installed at a time, and later extensions
+	 * win, so this is called again whenever the current one is not ours: after
+	 * the other `session_start` handlers have run, on every key the user types,
+	 * and on every input event.
+	 */
+	function ensureEditorWrapper(ctx: ExtensionContext | undefined): void {
+		if (!ctx || ctx.mode !== "tui" || !ctx.hasUI) return;
+
+		const previous = ctx.ui.getEditorComponent();
+		if (installedFactory !== undefined && previous === installedFactory) return;
+
+		const factory: EditorFactory = (tui, theme, keybindings) => {
+			const editor: EditorComponent =
+				previous?.(tui, theme, keybindings) ??
+				new CustomEditor(tui, theme, keybindings, { embedWorkingStatus: true });
+
+			// pi assigns `editor.onSubmit` after the factory returns, so a setter
+			// captures the real handler; the getter hands back the wrapped one.
+			let submit: ((text: string) => void) | undefined;
+			Object.defineProperty(editor, "onSubmit", {
+				configurable: true,
+				enumerable: true,
+				get: () => submit,
+				set: (handler: (text: string) => void) => {
+					submit = (text: string) => {
+						rememberPrompt(text);
+						handler(text);
+					};
+				},
+			});
+			return editor;
+		};
+
+		installedFactory = factory;
+		ctx.ui.setEditorComponent(factory);
+	}
+
+	pi.on("session_start", (_event, ctx) => {
 		history = loadHistory();
+		// A macrotask, not `await`: `session_start` handlers run in load order and
+		// the runner waits for each one, so awaiting here would still install this
+		// wrapper before the extensions that load after ctrl-r-pi get to install
+		// theirs. Firing after the handlers have run wraps the last one instead.
+		setTimeout(() => ensureEditorWrapper(ctx), 0);
+
+		// One editor component is active at a time and a later extension can claim
+		// it after that timer (pi-prompt-box does), which would drop the wrapper.
+		// Keys are the last chance to notice before they are submitted, and input
+		// listeners run before the key reaches the editor, so a keystroke arriving
+		// while the wrapper is missing is still delivered to the reinstalled
+		// editor. The check is an identity comparison until that happens.
+		ctx?.ui.onTerminalInput?.(() => {
+			ensureEditorWrapper(ctx);
+		});
 	});
 
-	pi.on("input", (event) => {
-		// Prompts sent by extensions are not user history.
+	pi.on("input", (event, ctx) => {
+		// Prompts sent by extensions are not user history. This also covers
+		// non-interactive sources (RPC), which never touch the editor.
 		if (event.source === "extension") return;
 		rememberPrompt(event.text);
+		ensureEditorWrapper(ctx);
 	});
 
 	pi.registerShortcut(Key.ctrlShift("r"), {

@@ -2,8 +2,9 @@
  * Headless smoke test for ctrl-r-pi.
  * Run with: bun smoke-test.ts
  *
- * Covers prompt capture, de-duplication, the 400-entry cap, slash/extension
- * skipping, and restoring a fuzzy-filtered selection through the shortcut.
+ * Covers prompt capture, de-duplication, the 400-entry cap, command capture
+ * (editor hook and input event), and restoring a fuzzy-filtered selection
+ * through the shortcut.
  */
 
 import assert from "node:assert/strict";
@@ -54,7 +55,93 @@ handlers.input?.({ type: "input", text: "first prompt", source: "interactive" })
 handlers.input?.({ type: "input", text: "/model", source: "interactive" });
 handlers.input?.({ type: "input", text: "from another extension", source: "extension" });
 
-assert.deepEqual(readPrompts(), ["first prompt", "second prompt"], "dedupe, most-recent-first, and skips");
+assert.deepEqual(
+	readPrompts(),
+	["/model", "first prompt", "second prompt"],
+	"dedupe, most-recent-first, slash commands kept, extension prompts skipped",
+);
+
+// --- command capture through the editor hook --------------------------------
+// pi dispatches registered extension commands before the input event, so the
+// editor's onSubmit callback is the only place that sees them.
+let installedFactory: ((tui: unknown, theme: unknown, kb: unknown) => never) | undefined;
+let terminalInput: (() => void) | undefined;
+const fakeEditor = {} as { onSubmit?: (text: string) => void };
+let currentFactory: typeof installedFactory = () => fakeEditor as never;
+const editorCtx = {
+	mode: "tui",
+	hasUI: true,
+	ui: {
+		getEditorComponent: () => currentFactory,
+		setEditorComponent: (factory: typeof installedFactory) => {
+			installedFactory = factory;
+			currentFactory = factory;
+		},
+		onTerminalInput: (handler: () => void) => {
+			terminalInput = handler;
+			return () => {};
+		},
+	},
+};
+handlers.session_start?.({ type: "session_start" }, editorCtx);
+// The install is deferred to a macrotask so extensions that load after this one
+// get to claim the editor first.
+await new Promise((resolve) => setTimeout(resolve, 5));
+assert.ok(installedFactory, "the editor factory was installed in tui mode");
+
+const wrappedEditor = installedFactory!(null, null, null) as unknown as {
+	onSubmit?: (text: string) => void;
+};
+const forwarded: string[] = [];
+wrappedEditor.onSubmit = (text: string) => forwarded.push(text); // pi's wiring
+wrappedEditor.onSubmit("/annotate notes.md");
+assert.equal(
+	readPrompts()[0],
+	"/annotate notes.md",
+	"a registered extension command is recorded from the editor hook",
+);
+assert.deepEqual(forwarded, ["/annotate notes.md"], "pi's own submit handler still runs");
+
+// An extension that replaces the editor later takes the wrapper with it; the
+// next input reinstalls it, chaining the replacement instead of discarding it.
+const foreignEditor = {} as { onSubmit?: (text: string) => void };
+currentFactory = () => foreignEditor as never;
+const beforeHeal = installedFactory;
+handlers.input?.({ type: "input", text: "plain prompt", source: "interactive" }, editorCtx);
+assert.notEqual(installedFactory, beforeHeal, "a foreign editor is re-wrapped");
+const healedEditor = installedFactory!(null, null, null) as unknown as {
+	onSubmit?: (text: string) => void;
+};
+assert.equal(healedEditor, foreignEditor, "the replacement editor is kept, not replaced");
+healedEditor.onSubmit = (text: string) => forwarded.push(text);
+healedEditor.onSubmit("/handoff now");
+assert.equal(readPrompts()[0], "/handoff now", "commands work again after a self-heal");
+
+// A keystroke is the last chance before the Enter that submits it: an editor
+// installed after the session_start timer (pi-prompt-box does this) is
+// re-wrapped from the terminal input hook before any command can be typed.
+const laterEditor = {} as { onSubmit?: (text: string) => void };
+currentFactory = () => laterEditor as never;
+assert.ok(terminalInput, "a terminal input listener was registered");
+terminalInput!();
+const restickiedEditor = installedFactory!(null, null, null) as unknown as {
+	onSubmit?: (text: string) => void;
+};
+assert.equal(restickiedEditor, laterEditor, "a keystroke re-wraps a replaced editor");
+restickiedEditor.onSubmit = (text: string) => forwarded.push(text);
+restickiedEditor.onSubmit("/quit");
+assert.equal(readPrompts()[0], "/quit", "commands are captured again after a keystroke");
+
+// The input event reports the same submission for skills and plain prompts;
+// dedupe keeps one entry and skips the redundant second write.
+handlers.input?.({ type: "input", text: "/annotate notes.md", source: "interactive" });
+assert.equal(
+	readPrompts().filter((prompt) => prompt === "/annotate notes.md").length,
+	1,
+	"the input event does not duplicate the editor hook's entry",
+);
+handlers.input?.({ type: "input", text: "/skill:release notes.md", source: "interactive" });
+assert.equal(readPrompts()[0], "/skill:release notes.md", "skill commands are recorded");
 
 // --- 400-entry cap ---------------------------------------------------------
 for (let i = 0; i < 405; i++) {
