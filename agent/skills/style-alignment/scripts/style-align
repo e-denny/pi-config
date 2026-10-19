@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# Entry point for the style-alignment skill.
+#
+# This wrapper is deliberately thin: the comparison/report logic is stdlib-only
+# Python, and the heavy stylometry analysis is delegated to the stylometry
+# skill's own wrapper, which bootstraps its virtualenv.
+#
+#   style-align init --baseline BASE.md --target DRAFT.md
+#   style-align compare --workdir DRAFT.style-alignment --target target-iter-01.md \
+#       --humanizer-report humanizer-00.md
+#   style-align status --workdir DRAFT.style-alignment
+#   style-align panel
+#
+# Override the stylometry entry point with STYLOMETRY_REPORT=/path/to/stylometry-report.
+
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="${PYTHON:-}"
+if [ -z "$PYTHON" ]; then
+  VENV="${PYSTYLOMETRY_VENV:-$HOME/.local/share/pystylometry/venv}"
+  if [ -x "$VENV/bin/python" ]; then
+    PYTHON="$VENV/bin/python"
+  else
+    PYTHON="python3"
+  fi
+fi
+
+exec "$PYTHON" "$HERE/style_align.py" "$@"
