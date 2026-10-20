@@ -1,0 +1,14 @@
+{
+  "name": "pi-ask",
+  "version": "0.1.0",
+  "description": "Give the model one tool, ask_user_question: it asks the user up to four questions with authored options, the user answers in a tabbed TUI dialog, and the choices come back as structured data.",
+  "type": "module",
+  "license": "MIT",
+  "keywords": ["pi", "pi-extension", "questions", "questionnaire", "tui", "ask-user"],
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "pi": {
+    "extensions": ["./index.ts"]
+  }
+}
