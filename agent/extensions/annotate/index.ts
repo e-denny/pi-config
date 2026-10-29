@@ -8,7 +8,8 @@
  * sidecar (see README.md) and drawn as rounded boxes next to the text they
  * belong to.
  * When Neovim exits, the window is closed and the sidecar is sent to the agent
- * as a user message so it can apply the feedback.
+ * as a user message so it can apply the feedback. Leaving Neovim with the abort
+ * key instead tells the agent the review was cancelled, so it applies nothing.
  *
  * The Neovim half is `e-denny/annotate.nvim`, installed by lazy.nvim, and is
  * loaded with `-c 'set rtp^=…'` from that checkout.
@@ -266,6 +267,13 @@ export default function annotateExtension(pi: ExtensionAPI) {
       const dir = path.dirname(target);
       const name = path.basename(target);
       const messagesLog = path.join(os.tmpdir(), `annotate-${process.pid}-${Date.now()}.log`);
+      // The Neovim plugin creates this file when the review is aborted (see
+      // annotate.nvim's M.abort). Its absence is what makes a normal finish a
+      // normal finish, so it is checked before the sidecar is read.
+      const abortMarker = path.join(
+        os.tmpdir(),
+        `annotate-abort-${process.pid}-${Date.now()}`,
+      );
 
       const command = [
         "nvim",
@@ -295,6 +303,8 @@ export default function annotateExtension(pi: ExtensionAPI) {
           `ANNOTATE_FILE=${target}`,
           "-e",
           `ANNOTATE_LOG=${messagesLog}`,
+          "-e",
+          `ANNOTATE_ABORT_FILE=${abortMarker}`,
           command,
         ],
         15_000,
@@ -334,6 +344,36 @@ export default function annotateExtension(pi: ExtensionAPI) {
       await tmux(["kill-window", "-t", windowId]);
       ctx.ui.setStatus("annotate", undefined);
 
+      const aborted = fs.existsSync(abortMarker);
+      if (aborted) {
+        try {
+          fs.rmSync(abortMarker);
+        } catch {
+          // ignore
+        }
+      }
+
+      const rel = (p: string) => (p.startsWith(ctx.cwd + path.sep) ? path.relative(ctx.cwd, p) : p);
+      const deliver = (message: string) => {
+        if (ctx.isIdle()) {
+          pi.sendUserMessage(message);
+        } else {
+          pi.sendUserMessage(message, { deliverAs: "followUp" });
+        }
+      };
+
+      if (aborted) {
+        ctx.ui.notify(`annotate: ${name} review aborted — the agent was told to stand down`, "info");
+        deliver(
+          [
+            `Annotation aborted: I cancelled the review of ${rel(target)} in Neovim, so there is no feedback to apply.`,
+            "",
+            `Take no action: leave ${rel(target)} unchanged, and ignore ${rel(commentsPath)} if it exists — it belongs to an unfinished review.`,
+          ].join("\n"),
+        );
+        return;
+      }
+
       const nvimOutput = takeMessages(messagesLog);
 
       let content = "";
@@ -361,7 +401,6 @@ export default function annotateExtension(pi: ExtensionAPI) {
         return;
       }
 
-      const rel = (p: string) => (p.startsWith(ctx.cwd + path.sep) ? path.relative(ctx.cwd, p) : p);
       const summary = annotations.map((a) => `${a.range} ${a.kind}`).join(", ");
       const message = [
         `I reviewed ${rel(target)} in Neovim. Feedback from ${rel(commentsPath)} (${annotations.length} annotation${annotations.length === 1 ? "" : "s"}):`,
@@ -378,11 +417,7 @@ export default function annotateExtension(pi: ExtensionAPI) {
         `- Annotations: ${summary}`,
       ].join("\n");
 
-      if (ctx.isIdle()) {
-        pi.sendUserMessage(message);
-      } else {
-        pi.sendUserMessage(message, { deliverAs: "followUp" });
-      }
+      deliver(message);
     },
   });
 }

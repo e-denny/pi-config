@@ -30,12 +30,16 @@ as a message, so it can apply the feedback.
 | Jump to the box for the annotation under the cursor | `<Space>C` on already-annotated text |
 | Remove the annotation under the cursor | `:AnnotateClear` |
 | Finish the review | `<Space>Q` (or `:AnnotateDone`, or just quit Neovim) |
+| Abort the review | `<Space>X` (or `:AnnotateAbort`) — the agent is told `annotation aborted` |
 
 `<leader>` is your Neovim leader (space in LazyVim); keys are buffer-local, so
 they do not leak into other files. The maps are configurable, see below.
 
 Leaving Neovim with `:qa`, `:wq`, `<Space>Q`, or `:AnnotateDone` all end the
 review. Unsaved edits to the reviewed file are written out before quitting.
+`<Space>X` (or `:AnnotateAbort`) ends it as *aborted* instead: the sidecar stays
+on disk for a later run, and the agent gets an `annotation aborted` message
+telling it to apply nothing.
 
 `/annotate` needs Pi to run inside tmux: the review opens as a new window of the
 session Pi is in, and that window is closed (with focus back on Pi) once Neovim
@@ -91,6 +95,7 @@ vim.g.annotate = {
   map_comment = "<leader>C",
   map_delete = "<leader>D",
   map_finish = "<leader>Q",
+  map_abort = "<leader>X",
   width_ratio = 0.42,   -- sidecar width as a share of the window
   min_width = 34,
   max_width = 90,
@@ -129,7 +134,11 @@ that it needs to be added to your lazy.nvim config first.
 The window is named `annotate: <file>` (automatic renaming is turned off for it,
 so it does not become `nvim`). Waiting is done by polling that pane with `tmux
 list-panes`, so quitting Neovim by any means — `<Space>Q`, `:qa`, closing the
-window — is detected. Neovim runs as the pane's own command and is started with a
+window — is detected. An abort is told apart from a finish by a marker file:
+the extension passes its path in `$ANNOTATE_ABORT_FILE`, and annotate.nvim
+writes it while aborting. When the marker is there the sidecar is ignored and
+the agent receives an `annotation aborted` message instead. Neovim runs as the
+pane's own command and is started with a
 `VimLeavePre` autocmd that writes its `:messages` history to a temporary file
 (path passed in `$ANNOTATE_LOG`): when the review ends without annotations,
 Neovim's own error lines from that history are reported, so a failed start is
@@ -146,6 +155,9 @@ overlays. Running `/annotate` outside tmux is refused (`$TMUX` is required).
   with its annotations, so unfinished notes are not lost.
 * **"no annotations in notes.md"** — the sidecar had no blocks; the scaffold file
   is removed again.
+* **The agent said the review was aborted** — you left Neovim with
+  `<Space>X`/`:AnnotateAbort`, so nothing was applied. The sidecar is kept;
+  `/annotate` the file again to resume from it.
 * **Closing the review window mid-review** — the sidecar is still read, so
   annotations already made are applied; if there were none, the scaffold is
   removed and nothing is sent.
