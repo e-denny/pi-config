@@ -17,3 +17,6 @@ agent/extensions/herdr-agent-state.ts
 # Extension dependencies
 agent/extensions/**/node_modules/
 
+# Git worktrees created outside the repo (e.g. by workmux)
+.worktrees/
+
