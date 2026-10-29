@@ -1,9 +1,10 @@
 # /annotate — review a Markdown file in Neovim, apply the notes in Pi
 
-`/annotate notes.md` opens a [Herdr](https://herdr.dev) tab running Neovim with
-the file under review on the left and its review sidecar `notes.comments.md` on
-the right. You mark up the text; when you leave Neovim the tab closes and the
-sidecar is handed to the agent as a message, so it can apply the feedback.
+`/annotate notes.md` opens a new window in the tmux session Pi runs in, with
+Neovim showing the file under review on the left and its review sidecar
+`notes.comments.md` on the right. You mark up the text; when you leave Neovim
+the window closes, focus returns to Pi, and the sidecar is handed to the agent
+as a message, so it can apply the feedback.
 
 ```
 ┌ notes.md ───────────────┬ notes.comments.md ────────────┐
@@ -35,6 +36,10 @@ they do not leak into other files. The maps are configurable, see below.
 
 Leaving Neovim with `:qa`, `:wq`, `<Space>Q`, or `:AnnotateDone` all end the
 review. Unsaved edits to the reviewed file are written out before quitting.
+
+`/annotate` needs Pi to run inside tmux: the review opens as a new window of the
+session Pi is in, and that window is closed (with focus back on Pi) once Neovim
+exits.
 
 ## What you see
 
@@ -100,13 +105,15 @@ vim.g.annotate = {
 ```
 
 Pi side: nothing to configure; the command takes the file path (relative to the
-working directory, or absolute; `~` is expanded).
+working directory, or absolute; `~` is expanded) and opens the tmux window
+itself.
 
 ## How it is wired
 
-* `index.ts` — the Pi extension: registers `/annotate`, opens the Herdr tab,
-  waits for Neovim to exit, closes the tab, and sends the sidecar as a user
-  message.
+* `index.ts` — the Pi extension: registers `/annotate`, opens a window in the
+  tmux session Pi is running in (`tmux new-window`, targeting the session of
+  `$TMUX_PANE`), waits for the Neovim pane to disappear, switches back to Pi's
+  window, kills the review window, and sends the sidecar as a user message.
 * The Neovim half is a separate plugin,
   [`e-denny/annotate.nvim`](https://github.com/e-denny/annotate.nvim), installed
   by lazy.nvim (layout, keymaps, highlighting, box rendering, sidecar
@@ -119,8 +126,13 @@ so the plugin does not have to be added to your Neovim configuration, and it is
 only active in sessions Pi started. If the plugin is missing, `/annotate` reports
 that it needs to be added to your lazy.nvim config first.
 
-Waiting is done by polling Herdr's pane foreground process, so closing the tab
-or quitting Neovim by any means is detected.
+The window is named `annotate: <file>` (automatic renaming is turned off for it,
+so it does not become `nvim`). Waiting is done by polling that pane with `tmux
+list-panes`, so quitting Neovim by any means — `<Space>Q`, `:qa`, closing the
+window — is detected. Neovim runs as the pane's own command and its stderr is
+captured to a temporary file: when the review ends without annotations, the first
+lines of that output are reported, so a failed start is diagnosable instead of
+silent. Running `/annotate` outside tmux is refused (`$TMUX` is required).
 
 ## Troubleshooting
 
@@ -128,9 +140,16 @@ or quitting Neovim by any means is detected.
   with its annotations, so unfinished notes are not lost.
 * **"no annotations in notes.md"** — the sidecar had no blocks; the scaffold file
   is removed again.
-* **"the Neovim tab closed before I could read notes.md"** — the tab was closed
-  while Neovim was still running; whatever the sidecar held at that point is
-  kept on disk.
+* **Closing the review window mid-review** — the sidecar is still read, so
+  annotations already made are applied; if there were none, the scaffold is
+  removed and nothing is sent.
+* **"no annotations in notes.md — Neovim reported: …"** — Neovim wrote to stderr
+  before exiting, usually a failed start (bad `rtp`, a broken plugin, a missing
+  binary). The quoted line is Neovim's own message.
+* **The review window is still open after `/annotate` returned** — the wait ran
+  out; the window is deliberately left alone so the review is not lost. Finish
+  there, then run `/annotate notes.md` again: the sidecar reopens with its
+  annotations and they are applied.
 * **Nothing happens on `<Space>C`** — the mapping is buffer-local to the reviewed
   file, and only active in visual mode for comments. Check `:verbose xmap <Space>C`.
 * **Boxes look ragged** — notes wrap to the box as you type, and a line that is
