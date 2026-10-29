@@ -44,6 +44,20 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+/**
+ * Registered as the first `-c` command: at exit, Neovim writes its `:messages`
+ * history to `$ANNOTATE_LOG`, which is how a failed start gets reported without
+ * touching the process's file descriptors (see takeMessages).
+ */
+const DUMP_MESSAGES = [
+  "lua local function dump()",
+  "local ok, m = pcall(vim.api.nvim_exec2, 'messages', { output = true })",
+  "if not ok then return end",
+  "pcall(vim.fn.writefile, vim.split(m.output, '\\n', { plain = true }), vim.env.ANNOTATE_LOG)",
+  "end",
+  "vim.api.nvim_create_autocmd('VimLeavePre', { callback = dump })",
+].join(" ");
+
 function expandHome(p: string): string {
   if (p === "~") return os.homedir();
   if (p.startsWith("~/")) return path.join(os.homedir(), p.slice(2));
@@ -131,8 +145,23 @@ export default function annotateExtension(pi: ExtensionAPI) {
     return "timeout";
   }
 
-  /** Neovim's stderr, kept so a failed start can be reported instead of guessed. */
-  function takeNvimLog(logPath: string): string {
+  /**
+   * Neovim's diagnostics, kept so a failed start can be reported instead of
+   * guessed.
+   *
+   * They come from Neovim's own `:messages` history, written to a temporary file
+   * at exit (see DUMP_MESSAGES), rather than from a redirected stderr. Since
+   * 0.11 the TUI is a client that starts the real editor as a child with
+   * `--embed`, and that child — the process the plugins run in — dup2()s its
+   * stdin and stdout onto stderr (`channel_from_stdio` in Neovim's
+   * `channel.c`). Redirecting stderr therefore leaves the plugin process with a
+   * regular file on fd 1, and everything that opens the terminal from there
+   * fails: Kitty-graphics images, image previews and math overlays all break
+   * with "failed to open stdout". The message history avoids the problem
+   * entirely, and unlike the pane's screen it survives the alternate screen
+   * being torn down when Neovim exits.
+   */
+  function takeMessages(logPath: string): string {
     let text: string;
     try {
       text = fs.readFileSync(logPath, "utf8");
@@ -147,8 +176,11 @@ export default function annotateExtension(pi: ExtensionAPI) {
     return text
       .split(/\r?\n/)
       .map((line) => line.trim())
+      // Neovim reports startup failures as its own messages; everything else in
+      // the history (annotate's notices, file-open messages) is noise.
+      .filter((line) => /^(?:E\d+:|Error\b|Failed to run|vim\.schedule|stack\s|\s+- \/)/i.test(line))
       // Closing the window hangs Neovim up; that is expected, not a failure.
-      .filter((line) => line && !/caught deadly signal/i.test(line))
+      .filter((line) => !/caught deadly signal/i.test(line))
       .slice(0, 3)
       .join(" / ")
       .slice(0, 400);
@@ -233,16 +265,17 @@ export default function annotateExtension(pi: ExtensionAPI) {
       const commentsPath = commentsPathFor(target);
       const dir = path.dirname(target);
       const name = path.basename(target);
-      const nvimLog = path.join(os.tmpdir(), `annotate-${process.pid}-${Date.now()}.log`);
+      const messagesLog = path.join(os.tmpdir(), `annotate-${process.pid}-${Date.now()}.log`);
 
       const command = [
         "nvim",
+        "-c",
+        shellQuote(DUMP_MESSAGES),
         "-c",
         shellQuote(`set rtp^=${nvimDir}`),
         "-c",
         shellQuote('lua require("annotate").setup()'),
         shellQuote(target),
-        `2>${shellQuote(nvimLog)}`,
       ].join(" ");
 
       ctx.ui.setStatus("annotate", `annotate: opening ${name} in Neovim…`);
@@ -260,6 +293,8 @@ export default function annotateExtension(pi: ExtensionAPI) {
           "#{window_id}\t#{pane_id}",
           "-e",
           `ANNOTATE_FILE=${target}`,
+          "-e",
+          `ANNOTATE_LOG=${messagesLog}`,
           command,
         ],
         15_000,
@@ -299,7 +334,7 @@ export default function annotateExtension(pi: ExtensionAPI) {
       await tmux(["kill-window", "-t", windowId]);
       ctx.ui.setStatus("annotate", undefined);
 
-      const nvimOutput = takeNvimLog(nvimLog);
+      const nvimOutput = takeMessages(messagesLog);
 
       let content = "";
       try {

@@ -129,10 +129,16 @@ that it needs to be added to your lazy.nvim config first.
 The window is named `annotate: <file>` (automatic renaming is turned off for it,
 so it does not become `nvim`). Waiting is done by polling that pane with `tmux
 list-panes`, so quitting Neovim by any means — `<Space>Q`, `:qa`, closing the
-window — is detected. Neovim runs as the pane's own command and its stderr is
-captured to a temporary file: when the review ends without annotations, the first
-lines of that output are reported, so a failed start is diagnosable instead of
-silent. Running `/annotate` outside tmux is refused (`$TMUX` is required).
+window — is detected. Neovim runs as the pane's own command and is started with a
+`VimLeavePre` autocmd that writes its `:messages` history to a temporary file
+(path passed in `$ANNOTATE_LOG`): when the review ends without annotations,
+Neovim's own error lines from that history are reported, so a failed start is
+diagnosable instead of silent. Neovim's stderr is deliberately *not* redirected:
+since 0.11 the TUI is a client that runs the editor as an `--embed` child, and
+that child (the process plugins run in) dup2()s its stdin and stdout onto stderr,
+so a redirected stderr leaves it with a regular file on fd 1 and breaks every
+plugin that opens the terminal — Kitty-graphics images, image previews, math
+overlays. Running `/annotate` outside tmux is refused (`$TMUX` is required).
 
 ## Troubleshooting
 
@@ -143,9 +149,9 @@ silent. Running `/annotate` outside tmux is refused (`$TMUX` is required).
 * **Closing the review window mid-review** — the sidecar is still read, so
   annotations already made are applied; if there were none, the scaffold is
   removed and nothing is sent.
-* **"no annotations in notes.md — Neovim reported: …"** — Neovim wrote to stderr
-  before exiting, usually a failed start (bad `rtp`, a broken plugin, a missing
-  binary). The quoted line is Neovim's own message.
+* **"no annotations in notes.md — Neovim reported: …"** — Neovim printed an
+  error before exiting, usually a failed start (bad `rtp`, a broken plugin, a
+  missing binary). The quoted line is Neovim's own message.
 * **The review window is still open after `/annotate` returned** — the wait ran
   out; the window is deliberately left alone so the review is not lost. Finish
   there, then run `/annotate notes.md` again: the sidecar reopens with its
