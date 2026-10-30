@@ -2,13 +2,12 @@
  * /annotate — review a Markdown file in Neovim and hand the annotations back
  * to Pi.
  *
- * `/annotate notes.md` opens a new window in the current tmux session running
- * Neovim with the reviewed file on the left and its `<name>.comments.md` review
- * sidecar on the right. Selections in the reviewed file are recorded in the
- * sidecar (see README.md) and drawn as rounded boxes next to the text they
- * belong to.
- * When Neovim exits, the window is closed and the sidecar is sent to the agent
- * as a user message so it can apply the feedback. Leaving Neovim with the abort
+ * `/annotate notes.md` opens a new Herdr tab running Neovim with the reviewed
+ * file on the left and its `<name>.comments.md` review sidecar on the right.
+ * Selections in the reviewed file are recorded in the sidecar (see README.md)
+ * and drawn as rounded boxes next to the text they belong to.
+ * When Neovim exits, the tab is closed and the sidecar is sent to the agent as
+ * a user message so it can apply the feedback. Leaving Neovim with the abort
  * key instead tells the agent the review was cancelled, so it applies nothing.
  *
  * The Neovim half is `e-denny/annotate.nvim`, installed by lazy.nvim, and is
@@ -23,6 +22,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const DEFAULT_WAIT_MS = 12 * 60 * 60 * 1000; // Neovim may stay open for hours
 const POLL_MS = 1500;
+const START_TIMEOUT_MS = 90_000;
 const MARKER = /<!--\s*annotate:#(\d+)\s+(\d+):(\d+)-(\d+):(\d+)\s+(\w+)\s*-->/;
 const SOURCE_LINE = /^<!--\s*annotate:source\b/;
 
@@ -98,49 +98,73 @@ export function parseAnnotations(text: string): Array<{ kind: string; range: str
   return found;
 }
 
-type TmuxResult = { stdout: string; code: number; stderr: string };
+type HerdrResult = { stdout: string; code: number; stderr: string };
 
-type PaneState = "running" | "exited" | "gone";
+type ProcInfo = {
+  process_info?: {
+    shell_pid?: number;
+    foreground_processes?: Array<{ name?: string; argv?: string[]; pid?: number }>;
+  };
+};
 
 export default function annotateExtension(pi: ExtensionAPI) {
-  const tmuxBin = () => process.env.TMUX_BIN_PATH || "tmux";
+  const herdrBin = () => process.env.HERDR_BIN_PATH || "herdr";
 
-  async function tmux(args: string[], timeoutMs?: number): Promise<TmuxResult> {
-    const result = await pi.exec(tmuxBin(), args, { timeout: timeoutMs });
+  async function herdr(args: string[], timeoutMs?: number): Promise<HerdrResult> {
+    const result = await pi.exec(herdrBin(), args, { timeout: timeoutMs });
     return { stdout: result.stdout, code: result.code, stderr: result.stderr };
   }
 
-  /**
-   * State of one pane. `list-panes` reports an error once the pane (or its
-   * window) is gone; `display-message` quietly prints nothing for a missing
-   * pane, which is indistinguishable from an empty format, so it is no use here.
-   */
-  async function paneState(paneId: string): Promise<PaneState> {
-    const { stdout, code } = await tmux([
-      "list-panes",
-      "-t",
-      paneId,
-      "-F",
-      "#{pane_id}\t#{pane_dead}",
-    ]);
-    if (code !== 0) return "gone";
-    for (const line of stdout.split(/\r?\n/)) {
-      const [id, dead] = line.split("\t");
-      if (id !== paneId) continue;
-      return dead === "1" ? "exited" : "running";
+  async function herdrJson<T>(args: string[], timeoutMs?: number): Promise<T | undefined> {
+    const { stdout, code, stderr } = await herdr(args, timeoutMs);
+    if (code !== 0) return undefined;
+    try {
+      const parsed = JSON.parse(stdout) as { result?: T };
+      return parsed.result;
+    } catch {
+      void stderr;
+      return undefined;
     }
-    return "gone";
+  }
+
+  /** Foreground processes in a pane that are not the pane's own shell. */
+  async function foregroundCommands(paneId: string): Promise<string[] | undefined> {
+    const info = await herdrJson<ProcInfo>(["pane", "process-info", "--pane", paneId]);
+    if (!info?.process_info) return undefined;
+    const shellPid = info.process_info.shell_pid;
+    const out: string[] = [];
+    for (const proc of info.process_info.foreground_processes ?? []) {
+      if (shellPid !== undefined && proc.pid === shellPid) continue;
+      const name = proc.argv?.[0] ?? proc.name ?? "";
+      if (name) out.push(name);
+    }
+    return out;
   }
 
   /**
-   * Wait for the Neovim pane to disappear. Neovim runs as the pane's own
-   * command, so leaving it — by any means — destroys the pane. The window may
-   * outlive it (a sidebar pane can keep it open), hence panes, not windows.
+   * Wait for the command started in the pane to appear and then finish.
+   * Polling the foreground process is more reliable than matching a sentinel in
+   * the pane output, which also matches the shell's echo of the command line.
    */
-  async function waitForPaneClose(paneId: string, timeoutMs: number): Promise<"closed" | "timeout"> {
+  async function waitForPane(paneId: string, timeoutMs: number): Promise<"exited" | "gone" | "timeout"> {
+    const startDeadline = Date.now() + START_TIMEOUT_MS;
+    let appeared = false;
+    while (Date.now() < startDeadline) {
+      const running = await foregroundCommands(paneId);
+      if (!running) return "gone";
+      if (running.length > 0) {
+        appeared = true;
+        break;
+      }
+      await sleep(POLL_MS);
+    }
+    if (!appeared) return "timeout";
+
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      if ((await paneState(paneId)) !== "running") return "closed";
+      const running = await foregroundCommands(paneId);
+      if (!running) return "gone";
+      if (running.length === 0) return "exited";
       await sleep(POLL_MS);
     }
     return "timeout";
@@ -180,7 +204,7 @@ export default function annotateExtension(pi: ExtensionAPI) {
       // Neovim reports startup failures as its own messages; everything else in
       // the history (annotate's notices, file-open messages) is noise.
       .filter((line) => /^(?:E\d+:|Error\b|Failed to run|vim\.schedule|stack\s|\s+- \/)/i.test(line))
-      // Closing the window hangs Neovim up; that is expected, not a failure.
+      // Closing the tab hangs Neovim up; that is expected, not a failure.
       .filter((line) => !/caught deadly signal/i.test(line))
       .slice(0, 3)
       .join(" / ")
@@ -218,9 +242,8 @@ export default function annotateExtension(pi: ExtensionAPI) {
         return;
       }
 
-      const tmuxPane = process.env.TMUX_PANE;
-      if (!process.env.TMUX || !tmuxPane) {
-        ctx.ui.notify("annotate: this command needs to run inside tmux", "error");
+      if (process.env.HERDR_ENV !== "1") {
+        ctx.ui.notify("annotate: this command needs to run inside Herdr", "error");
         return;
       }
 
@@ -250,19 +273,6 @@ export default function annotateExtension(pi: ExtensionAPI) {
         return;
       }
 
-      const origin = await tmux([
-        "display-message",
-        "-p",
-        "-t",
-        tmuxPane,
-        "#{session_id}\t#{window_id}",
-      ]);
-      const [sessionId, originWindow] = origin.stdout.trim().split("\t");
-      if (origin.code !== 0 || !sessionId || !originWindow) {
-        ctx.ui.notify("annotate: could not resolve the current tmux session", "error");
-        return;
-      }
-
       const commentsPath = commentsPathFor(target);
       const dir = path.dirname(target);
       const name = path.basename(target);
@@ -276,6 +286,9 @@ export default function annotateExtension(pi: ExtensionAPI) {
       );
 
       const command = [
+        `ANNOTATE_FILE=${shellQuote(target)}`,
+        `ANNOTATE_LOG=${shellQuote(messagesLog)}`,
+        `ANNOTATE_ABORT_FILE=${shellQuote(abortMarker)}`,
         "nvim",
         "-c",
         shellQuote(DUMP_MESSAGES),
@@ -287,61 +300,47 @@ export default function annotateExtension(pi: ExtensionAPI) {
       ].join(" ");
 
       ctx.ui.setStatus("annotate", `annotate: opening ${name} in Neovim…`);
-      const created = await tmux(
-        [
-          "new-window",
-          "-t",
-          sessionId,
-          "-c",
-          dir,
-          "-n",
-          `annotate: ${name}`,
-          "-P",
-          "-F",
-          "#{window_id}\t#{pane_id}",
-          "-e",
-          `ANNOTATE_FILE=${target}`,
-          "-e",
-          `ANNOTATE_LOG=${messagesLog}`,
-          "-e",
-          `ANNOTATE_ABORT_FILE=${abortMarker}`,
-          command,
-        ],
-        15_000,
-      );
-      const [windowId, paneId] = created.stdout.trim().split("\t");
-      if (created.code !== 0 || !windowId || !paneId) {
+      const tab = await herdrJson<{ tab: { tab_id: string }; root_pane: { pane_id: string } }>([
+        "tab",
+        "create",
+        "--cwd",
+        dir,
+        "--label",
+        `annotate: ${name}`,
+        "--focus",
+      ]);
+      if (!tab?.tab?.tab_id || !tab.root_pane?.pane_id) {
         ctx.ui.setStatus("annotate", undefined);
-        const detail = created.stderr.trim() || created.stdout.trim();
-        ctx.ui.notify(
-          `annotate: could not open a tmux window${detail ? ` — ${detail}` : ""}`,
-          "error",
-        );
+        ctx.ui.notify("annotate: could not open a Herdr tab", "error");
         return;
       }
-      // Otherwise tmux renames the window to "nvim" once the editor is up.
-      await tmux(["set-option", "-w", "-t", windowId, "automatic-rename", "off"]);
 
+      await herdr(["pane", "run", tab.root_pane.pane_id, command]);
       ctx.ui.setStatus(
         "annotate",
         `annotate: ${name} open — <Space>C comment, <Space>D delete, <Space>Q to finish`,
       );
 
-      const outcome = await waitForPaneClose(paneId, DEFAULT_WAIT_MS);
+      const outcome = await waitForPane(tab.root_pane.pane_id, DEFAULT_WAIT_MS);
 
       if (outcome === "timeout") {
         // Neovim is still open; leave it alone so the review is not lost.
         ctx.ui.setStatus("annotate", undefined);
+        if (process.env.HERDR_TAB_ID) {
+          await herdr(["tab", "focus", process.env.HERDR_TAB_ID]);
+        }
         ctx.ui.notify(
-          `annotate: gave up waiting on Neovim for ${name} — the window is still open; finish the review and run /annotate again to apply the notes`,
+          `annotate: gave up waiting on Neovim for ${name} — the tab is still open; finish the review and run /annotate again to apply the notes`,
           "warning",
         );
         return;
       }
 
-      // Back to the window Pi runs in before dropping the review window.
-      await tmux(["select-window", "-t", originWindow]);
-      await tmux(["kill-window", "-t", windowId]);
+      // Back to the tab Pi runs in before dropping the review tab.
+      await herdr(["tab", "close", tab.tab.tab_id]);
+      if (process.env.HERDR_TAB_ID) {
+        await herdr(["tab", "focus", process.env.HERDR_TAB_ID]);
+      }
       ctx.ui.setStatus("annotate", undefined);
 
       const aborted = fs.existsSync(abortMarker);

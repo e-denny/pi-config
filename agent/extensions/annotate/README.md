@@ -1,10 +1,10 @@
 # /annotate — review a Markdown file in Neovim, apply the notes in Pi
 
-`/annotate notes.md` opens a new window in the tmux session Pi runs in, with
-Neovim showing the file under review on the left and its review sidecar
+`/annotate notes.md` opens a [Herdr](https://herdr.dev) tab running Neovim
+with the file under review on the left and its review sidecar
 `notes.comments.md` on the right. You mark up the text; when you leave Neovim
-the window closes, focus returns to Pi, and the sidecar is handed to the agent
-as a message, so it can apply the feedback.
+the tab closes, focus returns to Pi, and the sidecar is handed to the agent as
+a message, so it can apply the feedback.
 
 ```
 ┌ notes.md ───────────────┬ notes.comments.md ────────────┐
@@ -41,9 +41,9 @@ review. Unsaved edits to the reviewed file are written out before quitting.
 on disk for a later run, and the agent gets an `annotation aborted` message
 telling it to apply nothing.
 
-`/annotate` needs Pi to run inside tmux: the review opens as a new window of the
-session Pi is in, and that window is closed (with focus back on Pi) once Neovim
-exits.
+`/annotate` needs Pi to run inside Herdr: the review opens as a new tab of the
+tabbed terminal Pi is in, and that tab is closed (with focus back on Pi) once
+Neovim exits. Running it outside Herdr is refused (`$HERDR_ENV` is required).
 
 ## What you see
 
@@ -110,15 +110,15 @@ vim.g.annotate = {
 ```
 
 Pi side: nothing to configure; the command takes the file path (relative to the
-working directory, or absolute; `~` is expanded) and opens the tmux window
+working directory, or absolute; `~` is expanded) and opens the Herdr tab
 itself.
 
 ## How it is wired
 
-* `index.ts` — the Pi extension: registers `/annotate`, opens a window in the
-  tmux session Pi is running in (`tmux new-window`, targeting the session of
-  `$TMUX_PANE`), waits for the Neovim pane to disappear, switches back to Pi's
-  window, kills the review window, and sends the sidecar as a user message.
+* `index.ts` — the Pi extension: registers `/annotate`, opens a Herdr tab
+  (`herdr tab create --cwd … --label … --focus`), runs Neovim in its root pane
+  with `herdr pane run`, waits for that process to finish, closes the tab,
+  focuses the tab Pi runs in, and sends the sidecar as a user message.
 * The Neovim half is a separate plugin,
   [`e-denny/annotate.nvim`](https://github.com/e-denny/annotate.nvim), installed
   by lazy.nvim (layout, keymaps, highlighting, box rendering, sidecar
@@ -131,14 +131,13 @@ so the plugin does not have to be added to your Neovim configuration, and it is
 only active in sessions Pi started. If the plugin is missing, `/annotate` reports
 that it needs to be added to your lazy.nvim config first.
 
-The window is named `annotate: <file>` (automatic renaming is turned off for it,
-so it does not become `nvim`). Waiting is done by polling that pane with `tmux
-list-panes`, so quitting Neovim by any means — `<Space>Q`, `:qa`, closing the
-window — is detected. An abort is told apart from a finish by a marker file:
-the extension passes its path in `$ANNOTATE_ABORT_FILE`, and annotate.nvim
-writes it while aborting. When the marker is there the sidecar is ignored and
-the agent receives an `annotation aborted` message instead. Neovim runs as the
-pane's own command and is started with a
+The tab is labelled `annotate: <file>`. Waiting is done by polling that pane's
+foreground process with `herdr pane process-info`, so quitting Neovim by any
+means — `<Space>Q`, `:qa`, closing the tab — is detected. An abort is told
+apart from a finish by a marker file: the extension passes its path in
+`$ANNOTATE_ABORT_FILE`, and annotate.nvim writes it while aborting. When the
+marker is there the sidecar is ignored and the agent receives an `annotation
+aborted` message instead. Neovim is started with a
 `VimLeavePre` autocmd that writes its `:messages` history to a temporary file
 (path passed in `$ANNOTATE_LOG`): when the review ends without annotations,
 Neovim's own error lines from that history are reported, so a failed start is
@@ -147,7 +146,7 @@ since 0.11 the TUI is a client that runs the editor as an `--embed` child, and
 that child (the process plugins run in) dup2()s its stdin and stdout onto stderr,
 so a redirected stderr leaves it with a regular file on fd 1 and breaks every
 plugin that opens the terminal — Kitty-graphics images, image previews, math
-overlays. Running `/annotate` outside tmux is refused (`$TMUX` is required).
+overlays.
 
 ## Troubleshooting
 
@@ -158,14 +157,14 @@ overlays. Running `/annotate` outside tmux is refused (`$TMUX` is required).
 * **The agent said the review was aborted** — you left Neovim with
   `<Space>X`/`:AnnotateAbort`, so nothing was applied. The sidecar is kept;
   `/annotate` the file again to resume from it.
-* **Closing the review window mid-review** — the sidecar is still read, so
+* **Closing the review tab mid-review** — the sidecar is still read, so
   annotations already made are applied; if there were none, the scaffold is
   removed and nothing is sent.
 * **"no annotations in notes.md — Neovim reported: …"** — Neovim printed an
   error before exiting, usually a failed start (bad `rtp`, a broken plugin, a
   missing binary). The quoted line is Neovim's own message.
-* **The review window is still open after `/annotate` returned** — the wait ran
-  out; the window is deliberately left alone so the review is not lost. Finish
+* **The review tab is still open after `/annotate` returned** — the wait ran
+  out; the tab is deliberately left alone so the review is not lost. Finish
   there, then run `/annotate notes.md` again: the sidecar reopens with its
   annotations and they are applied.
 * **Nothing happens on `<Space>C`** — the mapping is buffer-local to the reviewed
