@@ -75,7 +75,8 @@ popup. The first press selects a row (Ctrl+Down starts at the top, Ctrl+Up at
 the bottom) and every further press moves it one row; plain Up/Down work too
 while selecting. Enter opens the selected run in the running Emacs instance:
 the extension calls `emacsclient --eval`, which invokes
-`pi-subagents-open-run` from `emacs/pi-subagents.el`. That starts
+`pi-subagents-open-run` from the companion package `pi-subagents.el` in
+your Emacs configuration. That starts
 `scripts/subagent-view.mjs` against the run's artifact dir in a `term`
 buffer and pops up a new window by default (a new frame, unfocused, if you
 prefer `pi-subagents-display` `frame`). The view is the same `output.log` the

@@ -65,8 +65,8 @@ The extension reaches the Emacs instance that runs pi through `emacsclient`, so 
 (unless (server-running-p)
   (server-start))
 
-(add-to-list 'load-path
-             (expand-file-name "~/.pi/agent/extensions/pi-subagents/emacs"))
+;; pi-subagents.el lives in your Emacs configuration, not in the extension
+(add-to-list 'load-path (expand-file-name "~/.emacs.d/lisp"))
 (require 'pi-subagents)
 ```
 

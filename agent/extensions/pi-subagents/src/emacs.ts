@@ -11,9 +11,10 @@
  * literals rather than shell words.
  *
  * The evaluated form calls `pi-subagents-open-run` from the companion Emacs
- * package shipped at `emacs/pi-subagents.el`. That package starts the run's
- * viewer (`scripts/subagent-view.mjs`) in a `term` buffer and displays it in
- * a new window (default) or frame of the existing Emacs instance.
+ * package `pi-subagents.el`, which lives in the user's Emacs configuration
+ * (not in this extension) and is loaded from their init.el. That package
+ * starts the run's viewer (`scripts/subagent-view.mjs`) in a `term` buffer and
+ * displays it in a new window (default) or frame of the existing instance.
  *
  * Requires a running Emacs server (`M-x server-start`). When pi itself runs
  * inside an Emacs terminal (ghostel sets `INSIDE_EMACS=ghostel`), the server
@@ -43,11 +44,6 @@ export function viewerScriptPath(): string {
   return path.join(extensionRoot(), "scripts", "subagent-view.mjs");
 }
 
-/** Absolute path to the companion Emacs package directory. */
-export function emacsPackageDir(): string {
-  return path.join(extensionRoot(), "emacs");
-}
-
 /** Human-facing base name for the run's Emacs buffer (make-term adds the stars). */
 export function runBufferName(status: RunStatus): string {
   return `${EMACS_BUFFER_PREFIX}: ${status.agent} (${status.runId.slice(0, 8)})`;
@@ -69,7 +65,6 @@ function buildOpenForm(options: {
   node: string;
   viewer: string;
   runDir: string;
-  packageDir: string;
   display?: "window" | "frame";
 }): string {
   const display =
@@ -79,11 +74,10 @@ function buildOpenForm(options: {
         ? "'frame"
         : "nil";
   const missingMessage =
-    `pi-subagents: Emacs package not found; add ${options.packageDir} ` +
-    `to load-path and (require 'pi-subagents) in init.el`;
+    "pi-subagents: pi-subagents.el is not loaded; put it in ~/.emacs.d/lisp " +
+    "(already on load-path) and add (require 'pi-subagents) to init.el";
   return `(progn
   (unless (fboundp 'pi-subagents-open-run)
-    (add-to-list 'load-path ${elispString(options.packageDir)})
     (require 'pi-subagents nil t))
   (unless (fboundp 'pi-subagents-open-run)
     (error ${elispString(missingMessage)}))
@@ -111,7 +105,6 @@ export async function openRunInEmacs(
     node: process.execPath,
     viewer: viewerScriptPath(),
     runDir: status.asyncDir,
-    packageDir: emacsPackageDir(),
     display: config.emacsDisplay,
   });
   const args = [...(config.emacsclientArgs ?? []), "--eval", form];
