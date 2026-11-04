@@ -10,7 +10,7 @@
  *   - Ctrl+Up / Ctrl+Down (and plain Up/Down) walk the highlight one row at
  *     a time (first press anchors at the top for Ctrl+Down, bottom for
  *     Ctrl+Up — see selectRun in index.ts);
- *   - Enter confirms the highlighted run (the caller opens its herdr tab);
+ *   - Enter confirms the highlighted run (the caller opens its Emacs view);
  *   - Esc / Ctrl+C cancels and returns focus to the prompt.
  *
  * It renders zero lines (`render` returns `[]`), so the TUI composites

@@ -25,7 +25,7 @@ Invalid values throw a visible error at load time (no silent coercion).
   "stopAsyncOnShutdown": true,
   "retainTerminalMs": 21600000,
   "parallel": { "maxTasks": 8, "concurrency": 4 },
-  "herdrCommand": "herdr"
+  "emacsclientCommand": "emacsclient"
 }
 ```
 
@@ -44,15 +44,41 @@ Invalid values throw a visible error at load time (no silent coercion).
 | `retainTerminalMs` | int (ms) | `21600000` (6 h) | Terminal run dirs older than this are pruned on startup. |
 | `parallel.maxTasks` | int | `8` | Cap on fanout items per `parallel` call (items beyond the cap are dropped). |
 | `parallel.concurrency` | int | `4` | Default children running at once; per-call `concurrency` wins. |
-| `herdrCommand` | string | `"herdr"` | Binary (or path) used to open run viewer tabs. Only used by the Ctrl+Up / Ctrl+Down run selection; set to `""` to disable herdr integration (the selection then reports the run id instead). |
+| `emacsclientCommand` | string | `"emacsclient"` | Binary (or path) used to reach the running Emacs server. Only used by the Ctrl+Up / Ctrl+Down run selection; set to `""` to disable the Emacs integration (the selection then reports the run id instead). |
+| `emacsclientArgs` | string[] | `[]` | Extra arguments passed to `emacsclient` before `--eval`, e.g. `["-s", "myserver"]` for a named server. Do not pass `-a`/`--alternate-editor`: the view must open in the instance that is already running. |
+| `emacsDisplay` | `"window" \| "frame"` | Emacs package default (`window`) | Per-call override of where the view opens. Unset leaves the choice to `pi-subagents-display` in the Emacs package. |
 
 ## Keyboard shortcuts
 
 | Keys | Action |
 |------|--------|
-| `Ctrl+Up` / `Ctrl+Down` | Select an active run to view in a herdr tab — no popup: the first press paints a background highlight on a row of the active-run widget above the prompt, and every further press moves the highlight one row up/down (plain Up/Down work too). Enter opens the selected run's live working view in a new **herdr** tab (unfocused — you stay in the prompt); Esc (or Ctrl+C) clears the highlight and returns to the prompt without opening anything. |
+| `Ctrl+Up` / `Ctrl+Down` | Select an active run to view in Emacs — no popup: the first press paints a background highlight on a row of the active-run widget above the prompt, and every further press moves the highlight one row up/down (plain Up/Down work too). Enter opens the selected run's live working view in a new **Emacs** window (unfocused — you stay in the prompt; click the window or use your window command to switch); Esc (or Ctrl+C) clears the highlight and returns to the prompt without opening anything. |
 
-Only active runs are listed (the same rows the widget shows, refreshed live). The herdr tab runs `scripts/subagent-view.mjs`, which tails the run's `output.log` and renders the child's JSONL protocol as readable text — assistant output streams live, thinking blocks appear dimmed, tool calls are annotated, and a status footer ticks state · elapsed · tokens · model. Requires a running herdr server (`herdr status`) and `node` on PATH.
+Only active runs are listed (the same rows the widget shows, refreshed live). The view runs `scripts/subagent-view.mjs` in a `term` buffer, which tails the run's `output.log` and renders the child's JSONL protocol as readable text — assistant output streams live, thinking blocks appear dimmed, tool calls are annotated, and a status footer ticks state · elapsed · tokens · model.
+
+### Emacs setup
+
+The extension reaches the Emacs instance that runs pi through `emacsclient`, so that instance needs a server. Add to `init.el`:
+
+```elisp
+(require 'server)
+(unless (server-running-p)
+  (server-start))
+
+(add-to-list 'load-path
+             (expand-file-name "~/.pi/agent/extensions/pi-subagents/emacs"))
+(require 'pi-subagents)
+```
+
+Then `M-x pi-subagents-open-run` is available for manual use, and the Ctrl+Up / Ctrl+Down selection opens views in the same Emacs instance (including when pi runs in a ghostel/vterm terminal). The display and focus behavior live in the Emacs package:
+
+| Variable | Default | Meaning |
+|----------|---------|---------|
+| `pi-subagents-display` | `window` | `window` pops up a new window in the selected frame; `frame` opens a new frame; a function is called with the buffer. |
+| `pi-subagents-select-window` | `nil` | Keep keyboard focus in the terminal running pi. Set `t` to move to the view immediately. |
+| `pi-subagents-scroll-to-bottom` | `t` | Follow new viewer output. |
+
+If the server is not running, the extension reports it and tells you to start it; it never starts a separate Emacs or daemon, so the view always appears in your existing instance.
 
 ## Agent frontmatter reference
 

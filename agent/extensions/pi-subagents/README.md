@@ -64,7 +64,7 @@ subagent({ action: "run", agent: "scout", task: "Map the auth flow", async: fals
 | Branch parent history | `context: "fork"` (default is `fresh`) |
 | See agents | `subagent({ action: "list" })` or `/subagents-list` |
 | See runs | `subagent({ action: "status" })` or `/subagents` |
-| Watch a run live | `Ctrl+Up` / `Ctrl+Down` from the prompt → the highlight walks the active runs above the prompt → Enter opens a new **herdr** tab with a live readable view (Esc cancels) |
+| Watch a run live | `Ctrl+Up` / `Ctrl+Down` from the prompt → the highlight walks the active runs above the prompt → Enter opens the run's live readable view in a new **Emacs** window (Esc cancels) |
 | Stop a run | `subagent({ action: "stop", id })` or `/subagents-stop <id>` |
 | Check setup | `subagent({ action: "doctor" })` or `/subagents-doctor` |
 
@@ -79,7 +79,7 @@ subagent({ action: "run", agent: "scout", task: "Map the auth flow", async: fals
 - **Children are leaves.** A child pi process never gets the `subagent` tool (the extension skips registration when `PI_SUBAGENT_CHILD=1`), so you get bounded delegation by construction rather than by guardrails. The `maxSubagentDepth` config remains as a backstop if you later load the extension in children explicitly.
 - **Children are real sessions.** `context: "fork"` branches the parent session file with `pi --fork <file>`, so the child carries the actual conversation, not a summary.
 - **Nothing is in-memory-only.** Every run writes `status.json`, `events.jsonl`, `output.log`, and `output.md` under a run directory, so companion extensions and humans can observe without scraping terminal output.
-- **Live watching (herdr).** `Ctrl+Up` / `Ctrl+Down` walks a highlight through the active-run widget above the prompt (no popup — the selected row gets a background highlight); Enter opens the selected run's live view in a new herdr tab (`scripts/subagent-view.mjs` tails `output.log` and renders the child's JSONL as readable text). Requires a running herdr server; disable with `herdrCommand: ""` in config.
+- **Live watching (Emacs).** `Ctrl+Up` / `Ctrl+Down` walks a highlight through the active-run widget above the prompt (no popup — the selected row gets a background highlight); Enter opens the selected run's live view in the running Emacs instance (`scripts/subagent-view.mjs` tails `output.log` and renders the child's JSONL as readable text, in a `term` buffer). The pi extension calls `emacsclient --eval`, so the Emacs server must be running (`M-x server-start`); the companion package lives in [`emacs/pi-subagents.el`](emacs/pi-subagents.el) and is loaded from your init.el. Disable with `emacsclientCommand: ""` in config.
 
 ## License
 

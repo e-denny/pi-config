@@ -2,10 +2,10 @@
 /**
  * subagent-view.mjs — live readable viewer for one pi-subagents run.
  *
- * Spawned by the extension inside a herdr tab (via `herdr pane run`), this
- * tails the run's artifact dir and renders the child's JSONL protocol events
- * as human-readable text: assistant output streams live, thinking blocks are
- * shown dimmed, tool calls are annotated, and a status footer ticks with
+ * Spawned by the extension in an Emacs term buffer (via the companion
+ * emacs/pi-subagents.el package), this tails the run's artifact dir and
+ * renders the child's JSONL protocol events as human-readable text: assistant
+ * output streams live, thinking blocks are shown dimmed, tool calls are annotated, and a status footer ticks with
  * state · elapsed · tokens · model.
  *
  * Usage: node subagent-view.mjs <runDir>
@@ -243,7 +243,7 @@ function onSettled() {
   if (st.error) {
     for (const errLine of truncate(st.error, 600).split("\n")) emitContent(`error: ${errLine}`);
   }
-  emitContent(`${DIM}(run settled — ctrl+c to close this tab, scroll up to review)${RESET}`);
+  emitContent(`${DIM}(run settled — scroll up to review; kill this buffer when done)${RESET}`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -278,4 +278,4 @@ const interval = setInterval(() => {
   if (!settled) updateFooter();
 }, 250);
 // NOTE: deliberately NOT unref'd — the interval is what keeps this process
-// alive in the herdr pane. Exiting early would drop the live view.
+// alive in the Emacs term buffer. Exiting early would drop the live view.

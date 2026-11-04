@@ -43,13 +43,18 @@ export interface ExtensionConfig {
   parallel?: { maxTasks?: number; concurrency?: number };
   /** Terminal run dirs older than this (ms) are pruned on startup. */
   retainTerminalMs?: number;
-  /** herdr binary used to open run viewer tabs (default "herdr"). */
-  herdrCommand?: string;
+  /** emacsclient binary used to open live run views (default "emacsclient"). */
+  emacsclientCommand?: string;
+  /** Extra arguments passed to emacsclient before `--eval` (e.g. ["-s", "myserver"]). */
+  emacsclientArgs?: string[];
+  /** Per-call override of where the view opens; unset uses the Emacs package default. */
+  emacsDisplay?: "window" | "frame";
 }
 
 const ARTIFACT_DIRS = new Set(["session", "project", "temp"]);
 const CONTEXTS = new Set(["fresh", "fork"]);
 const DELIVERIES = new Set(["auto", "file"]);
+const EMACS_DISPLAYS = new Set(["window", "frame"]);
 
 export function extensionDir(): string {
   // src/config.ts -> project root
@@ -105,9 +110,22 @@ export function validateConfig(raw: Record<string, unknown>): void {
           throw new Error('config.artifactDir must be "session", "project", or "temp"');
         }
         break;
-      case "herdrCommand":
+      case "emacsclientCommand":
         if (value !== undefined && typeof value !== "string") {
-          throw new Error("config.herdrCommand must be a string (herdr binary or path)");
+          throw new Error("config.emacsclientCommand must be a string (emacsclient binary or path)");
+        }
+        break;
+      case "emacsclientArgs":
+        if (
+          value !== undefined &&
+          (!Array.isArray(value) || value.some((arg) => typeof arg !== "string"))
+        ) {
+          throw new Error("config.emacsclientArgs must be an array of strings");
+        }
+        break;
+      case "emacsDisplay":
+        if (value !== undefined && !EMACS_DISPLAYS.has(value as string)) {
+          throw new Error('config.emacsDisplay must be "window" or "frame"');
         }
         break;
       case "taskDelivery":

@@ -67,20 +67,25 @@ active (live elapsed time and token counts parsed from the child's output
 stream), then clears when nothing is active. Disable it by removing the
 handler or by not running a TUI; status actions still work.
 
-## Watching a run live: Ctrl+Up / Ctrl+Down → herdr tab
+## Watching a run live: Ctrl+Up / Ctrl+Down → Emacs view
 
-With a herdr server running, `Ctrl+Up` / `Ctrl+Down` in the prompt walks a
+With an Emacs server running, `Ctrl+Up` / `Ctrl+Down` in the prompt walks a
 background highlight through the active-run widget above the prompt — no
 popup. The first press selects a row (Ctrl+Down starts at the top, Ctrl+Up at
 the bottom) and every further press moves it one row; plain Up/Down work too
-while selecting. Enter creates a new **unfocused** herdr tab (`--no-focus`)
-running `scripts/subagent-view.mjs` against the selected run's artifact
-dir — the same `output.log` the widget derives from, rendered as readable
-text instead of JSONL: live assistant output, dimmed thinking blocks,
-annotated tool calls, and a status footer ticking state · elapsed · tokens ·
-model. Esc (or Ctrl+C) clears the highlight and returns to the prompt. See
-docs/configuration.md (Keyboard shortcuts) for the key map and `herdrCommand`
-config.
+while selecting. Enter opens the selected run in the running Emacs instance:
+the extension calls `emacsclient --eval`, which invokes
+`pi-subagents-open-run` from `emacs/pi-subagents.el`. That starts
+`scripts/subagent-view.mjs` against the run's artifact dir in a `term`
+buffer and pops up a new window by default (a new frame, unfocused, if you
+prefer `pi-subagents-display` `frame`). The view is the same `output.log` the
+widget derives from, rendered as readable text instead of JSONL: live
+assistant output, dimmed thinking blocks, annotated tool calls, and a status
+footer ticking state · elapsed · tokens · model. Esc (or Ctrl+C) clears the
+highlight and returns to the prompt; click the new window (or use your
+window command) to move to the view. See docs/configuration.md (Keyboard
+shortcuts and Emacs setup) for the key map, `emacsclientCommand` config, and
+the required `(server-start)`.
 
 ## Events on `pi.events`
 

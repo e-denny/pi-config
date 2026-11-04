@@ -51,7 +51,7 @@ import {
 } from "./runs.ts";
 import type { RunResult } from "./types.ts";
 import { markStaleRunsInterrupted, pruneOldArtifacts } from "./artifacts.ts";
-import { openRunInHerdrTab, resolveHerdrCommand } from "./herdr.ts";
+import { openRunInEmacs, resolveEmacsclientCommand } from "./emacs.ts";
 import { InlineSelectionCatcher } from "./subagent-picker.ts";
 
 export const WIDGET_KEY = "subagents";
@@ -877,19 +877,19 @@ export default function (pi: ExtensionAPI) {
   });
 
   /* ------------------------------------------------------------------ */
-  /* Inline run selection (Ctrl+Up / Ctrl+Down → herdr tab)              */
+  /* Inline run selection (Ctrl+Up / Ctrl+Down → Emacs view)             */
   /* ------------------------------------------------------------------ */
 
   /**
    * Enter inline selection: highlight a run in the under-prompt widget
    * (no popup) and capture keys through an invisible overlay. Ctrl+Up /
    * Ctrl+Down (and plain Up/Down) walk the highlight one run at a time,
-   * Enter opens the selected run's live view in a new herdr tab, Esc (or
-   * Ctrl+C) clears the highlight and returns to the prompt. The first
-   * press anchors at the top (delta +1, Ctrl+Down) or bottom (delta -1,
-   * Ctrl+Up) of the list.
+   * Enter opens the selected run's live view in the running Emacs instance
+   * (a new window by default), Esc (or Ctrl+C) clears the highlight and
+   * returns to the prompt. The first press anchors at the top (delta +1,
+   * Ctrl+Down) or bottom (delta -1, Ctrl+Up) of the list.
    */
-  const selectRunAndOpenTab = async (ctx: ExtensionContext, delta: 1 | -1): Promise<void> => {
+  const selectRunAndOpenView = async (ctx: ExtensionContext, delta: 1 | -1): Promise<void> => {
     try {
       if (listActiveStatus().length === 0) {
         ctx.ui.notify("No active subagent runs — launch one first (subagent tool or /subagents).", "info");
@@ -925,21 +925,22 @@ export default function (pi: ExtensionAPI) {
         return;
       }
       const config = loadConfig(ctx.cwd);
-      if (!resolveHerdrCommand(config)) {
+      if (!resolveEmacsclientCommand(config)) {
         ctx.ui.notify(
-          `subagent ${status.agent} · run ${status.runId.slice(0, 8)} — herdr integration disabled (herdrCommand is empty)`, "info",
+          `subagent ${status.agent} · run ${status.runId.slice(0, 8)} — Emacs integration disabled (emacsclientCommand is empty)`, "info",
         );
         return;
       }
       try {
-        const opened = await openRunInHerdrTab(pi, status, config);
+        const opened = await openRunInEmacs(pi, status, config);
         ctx.ui.notify(
-          `subagent ${status.agent} · opened herdr tab ${opened.tabId} (${opened.label}) — switch to it to watch`,
+          `subagent ${status.agent} · opened ${opened.bufferName} in Emacs ` +
+            "(unfocused — switch to it when you want to watch)",
           "info",
         );
       } catch (error) {
         ctx.ui.notify(
-          `Could not open herdr tab: ${error instanceof Error ? error.message : String(error)}`,
+          `Could not open the Emacs view: ${error instanceof Error ? error.message : String(error)}`,
           "error",
         );
       }
@@ -951,15 +952,15 @@ export default function (pi: ExtensionAPI) {
   };
 
   pi.registerShortcut("ctrl+up", {
-    description: "Select an active subagent run to view in a herdr tab (highlight moves up)",
+    description: "Select an active subagent run to view in Emacs (highlight moves up)",
     handler: (ctx) => {
-      void selectRunAndOpenTab(ctx, -1);
+      void selectRunAndOpenView(ctx, -1);
     },
   });
   pi.registerShortcut("ctrl+down", {
-    description: "Select an active subagent run to view in a herdr tab (highlight moves down)",
+    description: "Select an active subagent run to view in Emacs (highlight moves down)",
     handler: (ctx) => {
-      void selectRunAndOpenTab(ctx, 1);
+      void selectRunAndOpenView(ctx, 1);
     },
   });
 

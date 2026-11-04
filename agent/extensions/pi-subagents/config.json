@@ -12,5 +12,5 @@
   "stopAsyncOnShutdown": true,
   "retainTerminalMs": 21600000,
   "parallel": { "maxTasks": 8, "concurrency": 4 },
-  "herdrCommand": "herdr"
+  "emacsclientCommand": "emacsclient"
 }
