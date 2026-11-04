@@ -1,5 +1,5 @@
 {
-  "lastChangelogVersion": "1.4.0",
+  "lastChangelogVersion": "1.5.0",
   "theme": "dark",
   "defaultProvider": "deepseek",
   "defaultModel": "deepseek-flash",
@@ -9,5 +9,8 @@
   ],
   "packages": [
     "npm:pi-web-access"
-  ]
+  ],
+  "extensionChangelogVersions": {
+    "{\"source\":\"npm:pi-web-access\",\"scope\":\"user\"}": "0.46.0"
+  }
 }
