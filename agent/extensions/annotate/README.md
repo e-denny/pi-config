@@ -1,65 +1,69 @@
-# /annotate — review a Markdown file in Neovim, apply the notes in Pi
+# /annotate — review a Markdown or Org file in Emacs, apply the notes in Pi
 
-`/annotate notes.md` opens a [Herdr](https://herdr.dev) tab running Neovim
-with the file under review on the left and its review sidecar
-`notes.comments.md` on the right. You mark up the text; when you leave Neovim
-the tab closes, focus returns to Pi, and the sidecar is handed to the agent as
-a message, so it can apply the feedback.
+`/annotate notes.md` (or `notes.org`) opens the file in **your running Emacs
+instance** on the left and its review sidecar `notes.comments.md`
+(`notes.comments.org` for Org files) on the right. You mark up the text; when
+you finish, the review closes, your previous window layout comes back, and the
+sidecar is handed to the agent as a message, so it can apply the feedback.
 
 ```
-┌ notes.md ───────────────┬ notes.comments.md ────────────┐
-│ # Design notes          │                               │
-│                         │                               │
-│ The quick brown fox …   │ ╭─ 3:1 → 4:69  comment ──────╮ │
-│ have something to …     │ │ tighten this opening       │ │
-│                         │ ╰────────────────────────────╯ │
-│ ## Second section       │                               │
-│                         │ ╭─ 9:1 → 9:59  delete ───────╮ │
-│ ~~want to remove …~~    │ │ > want to remove entirely… │ │
-│                         │ ╰────────────────────────────╯ │
-└─────────────────────────┴───────────────────────────────┘
+┌ notes.md ─────────────────────┬ notes.comments.md ───────────────┐
+│ # Design notes                │                                  │
+│                               │                                  │
+│ The quick brown fox …         │ ╭─ 3:1 → 3:19  comment ────────╮ │
+│ have something to …           │ │ tighten this opening         │ │
+│                               │ ╰──────────────────────────────╯ │
+│ ## Second section             │                                  │
+│ ~~want to remove …~~          │ ╭─ 9:1 → 9:59  delete ─────────╮ │
+│                               │ │ > want to remove entirely…   │ │
+│                               │ ╰──────────────────────────────╯ │
+└───────────────────────────────┴──────────────────────────────────┘
 ```
 
 ## Use
 
 | Step | Keys |
 | --- | --- |
-| Comment a selection | select text in the reviewed file, `<Space>C` |
-| Write the note | the cursor jumps into the new box — type, then `<Space>C` jumps back |
-| Mark a selection for deletion | select text, `<Space>D` (press it again on the same range to undo) |
-| Jump to the box for the annotation under the cursor | `<Space>C` on already-annotated text |
-| Remove the annotation under the cursor | `:AnnotateClear` |
-| Finish the review | `<Space>Q` (or `:AnnotateDone`, or just quit Neovim) |
-| Abort the review | `<Space>X` (or `:AnnotateAbort`) — the agent is told `annotation aborted` |
+| Comment a region | select text in the reviewed file, `C-c C c` |
+| Write the note | the cursor jumps into the new box — type, then `C-c C j` jumps back |
+| Mark a region for deletion | select text, `C-c C d` (press it again on the same range to undo) |
+| Jump to the box for the annotation under the cursor | `C-c C c` on already-annotated text, or `C-c C j` |
+| Remove the annotation under the cursor | `C-c C k` |
+| Redraw (re-read the anchors) | `C-c C g` |
+| Finish the review | `C-c C q` |
+| Abort the review | `C-c C x` — the agent is told `annotation aborted` |
 
-`<leader>` is your Neovim leader (space in LazyVim); keys are buffer-local, so
-they do not leak into other files. The maps are configurable, see below.
+The keys are buffer-local to the two review buffers, so nothing else in your
+Emacs is touched. `pi-annotate-prefix-key` changes the `C-c C` prefix; the
+letter keys stay the same.
 
-Leaving Neovim with `:qa`, `:wq`, `<Space>Q`, or `:AnnotateDone` all end the
-review. Unsaved edits to the reviewed file are written out before quitting.
-`<Space>X` (or `:AnnotateAbort`) ends it as *aborted* instead: the sidecar stays
-on disk for a later run, and the agent gets an `annotation aborted` message
-telling it to apply nothing.
-
-`/annotate` needs Pi to run inside Herdr: the review opens as a new tab of the
-tabbed terminal Pi is in, and that tab is closed (with focus back on Pi) once
-Neovim exits. Running it outside Herdr is refused (`$HERDR_ENV` is required).
+`C-c C q`, killing either review buffer, or closing the review window all end
+the review the same way: the sidecar is written and handed to Pi. `C-c C x`
+ends it as *aborted* instead — the sidecar stays on disk for a later run and
+the agent gets an `annotation aborted` message telling it to apply nothing.
+Edits you made to the reviewed file are saved in either case.
 
 ## What you see
 
 * **Commented spans** get a yellow background in the reviewed file.
 * **Deleted spans** get strikethrough.
 * **Each annotation is its own rounded box** in the sidecar, labelled with the
-  start and end location of the span it refers to (`12:3 → 14:20  comment`).
+  start and end location of the span it refers to (`3:1 → 3:19  comment`).
 * **Boxes line up with their text.** The sidecar is laid out on the same line
-  numbers as the reviewed file (blank lines do the padding), and both windows
-  share `scrollbind`, so they scroll together.
-* The sidecar stays a plain Markdown file on disk: the boxes, borders and
-  highlights are decorations drawn by the plugin, not text in the file.
+  numbers as the reviewed file (blank lines do the padding), and the two
+  windows scroll together.
+* **The box under the cursor** gets a brighter border and a stronger highlight,
+  in either window.
+* Notes wrap to the box as you type (`fill-column` is set per buffer), and
+  overlong lines that arrive from elsewhere are re-wrapped on the next redraw.
+  The sidecar is shown with truncated lines so the right border stays on the
+  box edge; a single unbreakable token longer than the box can still cross it.
+* The sidecar stays a plain Markdown/Org file on disk: the boxes, borders and
+  highlights are Emacs overlays, not text.
 
 ## The sidecar format
 
-`notes.comments.md` is plain Markdown. One block per annotation, padded so each
+`notes.comments.md` is plain Markdown, one block per annotation, padded so each
 marker sits on the line it points at:
 
 ```markdown
@@ -67,7 +71,7 @@ marker sits on the line it points at:
 
 
 
-<!-- annotate:#1 3:1-4:69 comment -->
+<!-- annotate:#1 3:1-3:19 comment -->
 tighten this opening
 <!-- /annotate -->
 
@@ -76,103 +80,111 @@ tighten this opening
 <!-- /annotate -->
 ```
 
+For an Org file the sidecar is `notes.comments.org` and the markers are Org
+comments instead:
+
+```org
+# annotate:source notes.org
+
+# annotate:#1 3:1-3:19 comment
+tighten this opening
+# /annotate
+```
+
 * the marker holds an id, the 1-based `start_line:col-end_line:col` span
   (`col` end is inclusive) and the kind (`comment` or `delete`);
 * `comment` blocks hold your note;
-* `delete` blocks quote the removed text;
-* anchors follow your edits in the reviewed file, so the markers stay true and
-  the boxes move with the text.
+* `delete` blocks quote the removed text with `> ` prefixes;
+* anchors follow your edits in the reviewed file — Emacs markers move them, and
+  the marker lines are rewritten as you go, so the boxes stay true;
+* parsing accepts either comment style, so a sidecar written by an earlier run
+  (or by the old Neovim plugin) still opens.
 
-`/annotate` strips the blank padding before handing the file to the model.
+`/annotate` strips the padding and the source header before handing the file to
+the model.
 
-## Configuration
+## Setup
 
-Neovim side (`vim.g.annotate` before `require("annotate").setup()` runs, e.g. in
-your own loader):
+The Emacs half is `pi-annotate.el`, which lives **in your Emacs configuration**
+(`~/.emacs.d/lisp`), not in this extension. In `init.el`:
 
-```lua
-vim.g.annotate = {
-  map_comment = "<leader>C",
-  map_delete = "<leader>D",
-  map_finish = "<leader>Q",
-  map_abort = "<leader>X",
-  width_ratio = 0.42,   -- sidecar width as a share of the window
-  min_width = 34,
-  max_width = 90,
-  scroll_sync = true,
-  autosave = true,      -- write the sidecar as you annotate
-  autoformat = true,    -- wrap notes to the box width as you type; re-wrap any
-                        -- overlong line the sidecar opens with (or after a resize)
-  disable_completion = true, -- suppress completion popups (blink.cmp, nvim-cmp,
-                        -- mini.completion) in the reviewed file and the sidecar;
-                        -- buffer-local, other buffers are unaffected
-}
+```elisp
+(add-to-list 'load-path (expand-file-name "~/.emacs.d/lisp"))
+(require 'pi-annotate)
 ```
 
-Pi side: nothing to configure; the command takes the file path (relative to the
-working directory, or absolute; `~` is expanded) and opens the Herdr tab
-itself.
+Pi reaches that instance through `emacsclient`, so the Emacs server has to be
+running — the same requirement as pi-subagents:
+
+```elisp
+(require 'server)
+(unless (server-running-p)
+  (server-start))
+```
+
+If the server is not up, `/annotate` says so (including that Pi is inside Emacs
+when `INSIDE_EMACS` is set) instead of failing silently. It never starts a
+separate Emacs or daemon, so the review always appears in the instance you are
+running Pi in, ghostel/vterm terminals included.
+
+Emacs-side settings:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `pi-annotate-prefix-key` | `"C-c C"` | Prefix for the annotate commands. |
+| `pi-annotate-split-ratio` | `0.42` | Sidecar width as a share of the frame. |
+| `pi-annotate-min-width` | `34` | Minimum sidecar width, in columns. |
+| `pi-annotate-max-width` | `90` | Maximum sidecar width, in columns. |
+| `pi-annotate-scroll-sync` | `t` | Scroll the reviewed file and the sidecar together. |
+| `pi-annotate-autosave` | `t` | Write the sidecar as you annotate. |
+| `pi-annotate-autoformat` | `t` | Wrap notes to the box width. |
+
+The review takes the frame while it is open (reviewed file left, sidecar
+right); your window layout is restored when it ends.
+
+Pi-side configuration: none. `PI_ANNOTATE_EMACSCLIENT` overrides the
+`emacsclient` binary, and `EMACS_SOCKET_NAME` picks a named server, as usual.
 
 ## How it is wired
 
-* `index.ts` — the Pi extension: registers `/annotate`, opens a Herdr tab
-  (`herdr tab create --cwd … --label … --focus`), runs Neovim in its root pane
-  with `herdr pane run`, waits for that process to finish, closes the tab,
-  focuses the tab Pi runs in, and sends the sidecar as a user message.
-* The Neovim half is a separate plugin,
-  [`e-denny/annotate.nvim`](https://github.com/e-denny/annotate.nvim), installed
-  by lazy.nvim (layout, keymaps, highlighting, box rendering, sidecar
-  bookkeeping).
+* `index.ts` — the Pi extension: registers `/annotate`, resolves the target and
+  its sidecar, calls `emacsclient --eval` with a form that runs
+  `(pi-annotate-open FILE RESULT-FILE)`, waits for that result file to appear
+  (polling the filesystem, so no process is spawned per tick), then reads the
+  sidecar and sends it to the agent — or sends the abort message when the
+  review was aborted, or nothing at all when there were no annotations.
+* `pi-annotate.el` — the Emacs half: sidecar parsing, the two-window layout,
+  box rendering with overlays, anchor tracking via Emacs markers, the key map,
+  and the result file (`finished` / `aborted`) that tells Pi how it ended.
 
-The command loads the plugin from its lazy checkout with `nvim -c 'set
-rtp^=<data>/nvim/lazy/annotate.nvim' -c 'lua require("annotate").setup()'`. The
-checkout is resolved from `$XDG_DATA_HOME/nvim` (default `~/.local/share/nvim`),
-so the plugin does not have to be added to your Neovim configuration, and it is
-only active in sessions Pi started. If the plugin is missing, `/annotate` reports
-that it needs to be added to your lazy.nvim config first.
-
-The tab is labelled `annotate: <file>`. Waiting is done by polling that pane's
-foreground process with `herdr pane process-info`, so quitting Neovim by any
-means — `<Space>Q`, `:qa`, closing the tab — is detected. An abort is told
-apart from a finish by a marker file: the extension passes its path in
-`$ANNOTATE_ABORT_FILE`, and annotate.nvim writes it while aborting. When the
-marker is there the sidecar is ignored and the agent receives an `annotation
-aborted` message instead. Neovim is started with a
-`VimLeavePre` autocmd that writes its `:messages` history to a temporary file
-(path passed in `$ANNOTATE_LOG`): when the review ends without annotations,
-Neovim's own error lines from that history are reported, so a failed start is
-diagnosable instead of silent. Neovim's stderr is deliberately *not* redirected:
-since 0.11 the TUI is a client that runs the editor as an `--embed` child, and
-that child (the process plugins run in) dup2()s its stdin and stdout onto stderr,
-so a redirected stderr leaves it with a regular file on fd 1 and breaks every
-plugin that opens the terminal — Kitty-graphics images, image previews, math
-overlays.
+`/annotate` accepts `.md` and `.org` targets; anything else is refused. An
+existing sidecar is reopened with its annotations, so an interrupted review
+resumes instead of starting over.
 
 ## Troubleshooting
 
+* **"no Emacs server reachable"** — the Emacs you are running Pi in has no
+  server. `M-x server-start` (and the `init.el` snippet above so it starts with
+  Emacs), then run `/annotate` again.
+* **"the Emacs package `pi-annotate.el` is not loaded"** — `pi-annotate.el` is
+  not on `load-path` or `init.el` does not `require` it. Put it in
+  `~/.emacs.d/lisp` and add the require.
 * **A sidecar from an earlier review is still there** — `/annotate` reopens it
   with its annotations, so unfinished notes are not lost.
-* **"no annotations in notes.md"** — the sidecar had no blocks; the scaffold file
-  is removed again.
-* **The agent said the review was aborted** — you left Neovim with
-  `<Space>X`/`:AnnotateAbort`, so nothing was applied. The sidecar is kept;
-  `/annotate` the file again to resume from it.
-* **Closing the review tab mid-review** — the sidecar is still read, so
-  annotations already made are applied; if there were none, the scaffold is
-  removed and nothing is sent.
-* **"no annotations in notes.md — Neovim reported: …"** — Neovim printed an
-  error before exiting, usually a failed start (bad `rtp`, a broken plugin, a
-  missing binary). The quoted line is Neovim's own message.
-* **The review tab is still open after `/annotate` returned** — the wait ran
-  out; the tab is deliberately left alone so the review is not lost. Finish
-  there, then run `/annotate notes.md` again: the sidecar reopens with its
-  annotations and they are applied.
-* **Nothing happens on `<Space>C`** — the mapping is buffer-local to the reviewed
-  file, and only active in visual mode for comments. Check `:verbose xmap <Space>C`.
-* **Boxes look ragged** — notes wrap to the box as you type, and a line that is
-  already too long when the sidecar is opened or the pane is resized is
-  re-wrapped on the next redraw (`autoformat = false` disables the re-wrapping;
-  a single unbreakable token longer than the panel can still cross the border).
-* **Neovim asks about a swap file for the sidecar** — it should not: the sidecar
-  buffer is opened with `swapfile=off`. A stale swap for the *reviewed* file
-  behaves as normal Neovim.
+* **"no annotations in notes.md"** — the review ended without any blocks; the
+  scaffold sidecar is removed again.
+* **The agent said the review was aborted** — you left with `C-c C x`, so
+  nothing was applied. The sidecar is kept; `/annotate` the file again to resume
+  from it.
+* **"gave up waiting on Emacs"** — the wait ran out; the review is deliberately
+  left open. Finish it there, then run `/annotate` again: the sidecar reopens
+  with its annotations and they are applied.
+* **Killing a review buffer mid-review** — that counts as finishing: the
+  sidecar is still read, so the annotations already made are applied; if there
+  were none, the scaffold is removed and nothing is sent.
+* **A later box sits lower than its text** — a box that would overlap the one
+  above it is pushed down instead (marker, note, end marker, blank line take
+  four lines per annotation), the same trade the Neovim plugin made.
+* **Nothing happens on `C-c C c`** — the command needs an active region; select
+  some text first. The keys are buffer-local to the reviewed file and its
+  sidecar.
