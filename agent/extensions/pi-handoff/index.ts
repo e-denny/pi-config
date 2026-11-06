@@ -76,11 +76,7 @@ export function activate(
 			unprotect(ctx);
 			flow.finish(ctx, request.handoffId);
 			ctx.ui.notify(text, "error");
-			if (prompts.length > 0) {
-				pi.sendUserMessage(
-					`The session handoff failed before replacement. These prompts were held back and are returned to this session:\n\n${formatDeferredPrompts(prompts)}`,
-				);
-			}
+			returnDeferredPrompts(pi, prompts);
 		},
 	});
 	registerNativeTransitionBridge(pi, transition);
@@ -101,6 +97,7 @@ export function activate(
 						if (phase === "retry-delay") ctx.ui.notify("Retrying the session handoff writer.", "info");
 					},
 					onSuccess(result, ctx) {
+						const deferred = flow.deferredSnapshot?.prompts ?? [];
 						const token = transition.prepare({
 							handoffId: result.handoff.id,
 							sourceSessionPath: result.handoff.sourceSessionPath,
@@ -109,11 +106,14 @@ export function activate(
 						if (token === undefined) {
 							flow.finish(ctx, result.handoff.id);
 							ctx.ui.notify("Could not start the correlated session handoff transition.", "error");
+							returnDeferredPrompts(pi, deferred);
 							return;
 						}
 						ctx.ui.notify(
-							`Session handoff dossier accepted on writer attempt ${result.attempt}.`,
-							"info",
+							result.recovered
+								? `Session handoff dossier recovered from the writer's final message on attempt ${result.attempt}; submit_handoff was not called.`
+								: `Session handoff dossier accepted on writer attempt ${result.attempt}.`,
+							result.recovered ? "warning" : "info",
 						);
 						try {
 							pi.sendUserMessage(nativeTransitionCommand(token), {
@@ -124,11 +124,15 @@ export function activate(
 							transition.cancel();
 							flow.finish(ctx, result.handoff.id);
 							ctx.ui.notify(`Could not request native session replacement: ${message(error)}`, "error");
+							returnDeferredPrompts(pi, deferred);
 						}
 					},
 					onTerminalFailure(reason, text, ctx) {
+						const prompts = flow.deferredSnapshot?.prompts ?? [];
 						flow.finish(ctx);
-						if (reason !== "cancelled") ctx.ui.notify(text, "error");
+						if (reason === "cancelled") return;
+						ctx.ui.notify(text, "error");
+						returnDeferredPrompts(pi, prompts);
 					},
 				});
 
@@ -153,8 +157,10 @@ export function activate(
 		},
 		onReady(handoff, ctx) {
 			if (writer === undefined) {
+				const prompts = flow.deferredSnapshot?.prompts ?? [];
 				flow.finish(ctx, handoff.id);
 				ctx.ui.notify("Session handoff writer is unavailable in this runtime.", "error");
+				returnDeferredPrompts(pi, prompts);
 				return;
 			}
 			if (!writer.start(handoff, ctx)) {
@@ -225,9 +231,13 @@ export function activate(
 		});
 	}
 
-	pi.on("agent_settled", (_event, ctx) => {
+	pi.on("message_end", (event) => {
+		writer?.observeMessage(event.message);
+	});
+
+	pi.on("agent_settled", (event, ctx) => {
 		if (writer?.isActive) {
-			writer.handleSettled(ctx);
+			writer.handleSettled(ctx, event.aborted);
 			return;
 		}
 		flow.handleSettled(ctx);
@@ -305,14 +315,19 @@ function cancelHandoff(
 	flow: HandoffFlow,
 	writer: HandoffWriter | undefined,
 ): void {
+	const prompts = flow.deferredSnapshot?.prompts ?? [];
 	const cancelledWriter = writer?.cancel(ctx) ?? false;
 	const cancelledFlow = flow.cancel(ctx);
 	if (!cancelledWriter && !cancelledFlow) {
 		ctx.ui.notify("No active session handoff to cancel.", "info");
 		return;
 	}
+	const content =
+		prompts.length === 0
+			? CANCELLATION_INSTRUCTION
+			: `${CANCELLATION_INSTRUCTION}\n\nThese prompts were held back during the handoff and are returned to this session:\n\n${formatDeferredPrompts(prompts)}`;
 	pi.sendMessage(
-		{ customType: CANCELLATION_MESSAGE_TYPE, content: CANCELLATION_INSTRUCTION, display: true },
+		{ customType: CANCELLATION_MESSAGE_TYPE, content, display: true },
 		{ deliverAs: "followUp", triggerTurn: true },
 	);
 	ctx.ui.notify("Session handoff cancelled.", "info");
@@ -382,4 +397,11 @@ function writerRuntimeFrom(pi: ExtensionAPI): WriterRuntime | undefined {
 
 function message(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
+}
+
+function returnDeferredPrompts(pi: ExtensionAPI, prompts: readonly string[]): void {
+	if (prompts.length === 0) return;
+	pi.sendUserMessage(
+		`The session handoff failed before replacement. These prompts were held back and are returned to this session:\n\n${formatDeferredPrompts(prompts)}`,
+	);
 }

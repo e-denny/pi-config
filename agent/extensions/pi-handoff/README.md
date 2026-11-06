@@ -37,7 +37,7 @@ The design follows [pi-blitz-handoff](https://github.com/MircoBlitz/pi-blitz-han
 2. At the boundary the Call Template defines, the model calls `handoff_go`, or `handoff_go_with_user_deferral` when you appear to be in the middle of an interactive step. Deferral opens a Ready / Wait / Cancel dialog. Choosing Wait suspends the transfer until the model calls `handoff_go` later.
 3. If no readiness tool is called within `readinessRetrySeconds`, one visible reminder re-applies the same instruction. There is no polling and no second reminder.
 4. After GO, the extension defers user prompts instead of letting them reach the writer. They stay ordered in memory.
-5. At the next idle boundary, the writer runs with exactly one active tool: `submit_handoff`. The writer turn cannot do source work. It writes the dossier from the current context and submits it.
+5. At the next idle boundary, the writer runs with exactly one active tool: `submit_handoff`. The writer turn cannot do source work. It writes the dossier from the current context and submits it. If the writer ends its turn with a complete dossier in its final assistant message but never calls `submit_handoff`, the extension recovers that message and treats it as the submission instead of failing the handoff. The notification reports when this recovery happened.
 6. The extension appends any deferred prompts to the dossier, then calls `ctx.newSession({ parentSession })` and sends the assembled Markdown as the first user message of the replacement. The source session stays on disk.
 7. The active tool list is restored on success, cancellation, exhaustion, or failure.
 

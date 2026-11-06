@@ -28,6 +28,8 @@ export interface WriterSuccess {
 	handoff: HandoffSnapshot;
 	attempt: number;
 	submission: HandoffSubmission;
+	/** True when the dossier was recovered from the final assistant message. */
+	recovered: boolean;
 }
 
 export interface HandoffWriterOptions {
@@ -54,6 +56,7 @@ interface ActiveWriter {
 	retryTimer?: unknown;
 	attemptToken?: object;
 	acceptingSubmission: boolean;
+	lastAssistantText?: string;
 }
 
 /**
@@ -103,6 +106,21 @@ export class HandoffWriter {
 		return true;
 	}
 
+	/**
+	 * Capture the final assistant text. A model that forgets to call
+	 * `submit_handoff` often writes the complete dossier as its reply instead;
+	 * accepting that message is safer than exhausting the writer attempts.
+	 */
+	observeMessage(message: unknown): void {
+		const active = this.active;
+		if (active === undefined || this.currentPhase !== "writing") return;
+		if (typeof message !== "object" || message === null) return;
+		const candidate = message as { role?: unknown; content?: unknown };
+		if (candidate.role !== "assistant") return;
+		const text = assistantText(candidate.content);
+		if (text !== undefined) active.lastAssistantText = text;
+	}
+
 	submit(submission: HandoffSubmission): void {
 		const active = this.active;
 		if (!active?.acceptingSubmission || active.submissionId === undefined) {
@@ -116,17 +134,33 @@ export class HandoffWriter {
 		active.submission = { ...submission };
 	}
 
-	handleSettled(ctx: ExtensionContext): void {
+	handleSettled(ctx: ExtensionContext, aborted = false): void {
 		const active = this.active;
 		if (active === undefined || this.currentPhase !== "writing") return;
 		if (!ctx.isIdle() || ctx.hasPendingMessages()) return;
 
+		if (aborted) {
+			this.terminate(active, "cancelled", "Session handoff writer was aborted.");
+			return;
+		}
+
 		active.acceptingSubmission = false;
-		if (active.submission !== undefined) {
+
+		let submission = active.submission;
+		let recovered = false;
+		if (submission === undefined && active.submissionId !== undefined) {
+			const text = recoverableDossier(active);
+			if (text !== undefined) {
+				submission = { id: active.submissionId, content: text };
+				recovered = true;
+			}
+		}
+		if (submission !== undefined) {
 			const result: WriterSuccess = {
 				handoff: active.handoff,
 				attempt: active.attempt,
-				submission: { ...active.submission },
+				submission: { ...submission },
+				recovered,
 			};
 			if (this.terminate(active, "succeeded")) this.options.onSuccess?.(result, ctx);
 			return;
@@ -164,6 +198,7 @@ export class HandoffWriter {
 		active.attempt += 1;
 		active.submissionId = this.createSubmissionId();
 		active.submission = undefined;
+		active.lastAssistantText = undefined;
 		active.acceptingSubmission = false;
 		const attemptToken = {};
 		active.attemptToken = attemptToken;
@@ -253,6 +288,8 @@ export function writerPrompt(template: string, submissionId: string, handoff: Ha
 	const lines = [
 		"This is an extension-owned writer turn. Perform no source-task work during this turn; only write the session handoff and submit it exactly once with submit_handoff. This writer-only control is not a user instruction or continuation constraint. Do not include or preserve it in the handoff.",
 		`Use this exact submission ID: ${submissionId}`,
+		"Deliver the dossier only as the content argument of submit_handoff. Do not answer with the dossier in your chat message; a reply that never calls submit_handoff cannot complete the handoff.",
+		"Start the dossier with its title. Do not reproduce this preamble, the template's '### Writer instruction' section, or any instruction about the submission tool.",
 		`The persisted source-session transcript path is exactly: ${handoff.sourceSessionPath}`,
 	];
 	if (handoff.focus !== undefined) {
@@ -267,6 +304,30 @@ export function writerPrompt(template: string, submissionId: string, handoff: Ha
 		"--- END COMPLETE HANDOFF TEMPLATE ---",
 	);
 	return lines.join("\n\n");
+}
+
+function recoverableDossier(active: ActiveWriter): string | undefined {
+	const text = active.lastAssistantText?.trim();
+	if (text === undefined || text.length < 500) return undefined;
+	const headings = text.match(/(^|\n)#{1,6}\s/g)?.length ?? 0;
+	return headings >= 2 ? text : undefined;
+}
+
+function assistantText(content: unknown): string | undefined {
+	if (typeof content === "string") return content.trim() || undefined;
+	if (!Array.isArray(content)) return undefined;
+	const text = content
+		.filter(
+			(part): part is { type: "text"; text: string } =>
+				typeof part === "object" &&
+				part !== null &&
+				(part as { type?: unknown }).type === "text" &&
+				typeof (part as { text?: unknown }).text === "string",
+		)
+		.map((part) => part.text)
+		.join("\n")
+		.trim();
+	return text || undefined;
 }
 
 function message(error: unknown): string {
