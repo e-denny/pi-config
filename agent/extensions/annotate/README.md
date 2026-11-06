@@ -7,17 +7,17 @@ you finish, the review closes, your previous window layout comes back, and the
 sidecar is handed to the agent as a message, so it can apply the feedback.
 
 ```
-┌ notes.md ─────────────────────┬ notes.comments.md ───────────────┐
-│ # Design notes                │                                  │
-│                               │                                  │
-│ The quick brown fox …         │ ╭─ 3:1 → 3:19  comment ────────╮ │
-│ have something to …           │ │ tighten this opening         │ │
-│                               │ ╰──────────────────────────────╯ │
-│ ## Second section             │                                  │
-│ ~~want to remove …~~          │ ╭─ 9:1 → 9:59  delete ─────────╮ │
-│                               │ │ > want to remove entirely…   │ │
-│                               │ ╰──────────────────────────────╯ │
-└───────────────────────────────┴──────────────────────────────────┘
+┌ notes.md ─────────────────────┬ notes.comments.md ─────────────────────┐
+│ # Design notes                │                                        │
+│                               │                                        │
+│ The quick brown fox …         │ # annotate:#1 3:1-3:19 comment ─────── │
+│ have something to …           │ tighten this opening                   │
+│                               │ # /annotate ───────────────────────────│
+│ ## Second section             │                                        │
+│ ~~want to remove …~~          │ # annotate:#3 9:1-9:59 delete ─────────│
+│                               │ > want to remove entirely, and on…     │
+│                               │ # /annotate ───────────────────────────│
+└───────────────────────────────┴────────────────────────────────────────┘
 ```
 
 ## Use
@@ -25,9 +25,9 @@ sidecar is handed to the agent as a message, so it can apply the feedback.
 | Step | Keys |
 | --- | --- |
 | Comment a region | select text in the reviewed file, `C-c C c` |
-| Write the note | the cursor jumps into the new box — type, then `C-c C j` jumps back |
+| Write the note | the cursor jumps into the new note — type, then `C-c C j` jumps back |
 | Mark a region for deletion | select text, `C-c C d` (press it again on the same range to undo) |
-| Jump to the box for the annotation under the cursor | `C-c C c` on already-annotated text, or `C-c C j` |
+| Jump to the note for the annotation under the cursor | `C-c C c` on already-annotated text, or `C-c C j` |
 | Remove the annotation under the cursor | `C-c C k` |
 | Redraw (re-read the anchors) | `C-c C g` |
 | Finish the review | `C-c C q` |
@@ -47,19 +47,23 @@ Edits you made to the reviewed file are saved in either case.
 
 * **Commented spans** get a yellow background in the reviewed file.
 * **Deleted spans** get strikethrough.
-* **Each annotation is its own rounded box** in the sidecar, labelled with the
-  start and end location of the span it refers to (`3:1 → 3:19  comment`).
-* **Boxes line up with their text.** The sidecar is laid out on the same line
-  numbers as the reviewed file (blank lines do the padding), and the two
-  windows scroll together.
-* **The box under the cursor** gets a brighter border and a stronger highlight,
-  in either window.
-* Notes wrap to the box as you type (`fill-column` is set per buffer), and
-  overlong lines that arrive from elsewhere are re-wrapped on the next redraw.
-  The sidecar is shown with truncated lines so the right border stays on the
-  box edge; a single unbreakable token longer than the box can still cross it.
-* The sidecar stays a plain Markdown/Org file on disk: the boxes, borders and
-  highlights are Emacs overlays, not text.
+* **Each annotation is set off by a drawn rule** above and below it in the
+  sidecar, and the opening rule carries the annotation's id and the start and
+  end of the span it refers to (`# annotate:#1 3:1-3:19 comment ──────`).
+* **The rules line up with the annotated text.** The sidecar is laid out on the
+  same line numbers as the reviewed file (blank lines do the padding), and the
+  two windows scroll together.
+* **The annotation under the cursor** gets brighter rules and a stronger
+  highlight, in either window.
+* **The note is ordinary text.** Nothing is drawn over it, so the cursor in it
+  behaves like the cursor anywhere else; notes wrap to the sidecar width a
+  moment after typing stops, and overlong lines that arrive from elsewhere are
+  wrapped by the same redraw. The sidecar is shown with truncated lines so each
+  note stays on one screen line; a single unbreakable token longer than the
+  window can still cross its edge.
+* The sidecar stays a plain Markdown/Org file on disk: the rules are text, and
+  only the source header (hidden) and the highlights in the reviewed file are
+  Emacs overlays.
 
 ## The sidecar format
 
@@ -71,13 +75,13 @@ marker sits on the line it points at:
 
 
 
-<!-- annotate:#1 3:1-3:19 comment -->
+<!-- annotate:#1 3:1-3:19 comment ───────────────────────────── -->
 tighten this opening
-<!-- /annotate -->
+<!-- /annotate ────────────────────────────────────────────────── -->
 
-<!-- annotate:#3 9:1-9:59 delete -->
+<!-- annotate:#3 9:1-9:59 delete ─────────────────────────────── -->
 > want to remove entirely, and one we may want to comment on.
-<!-- /annotate -->
+<!-- /annotate ────────────────────────────────────────────────── -->
 ```
 
 For an Org file the sidecar is `notes.comments.org` and the markers are Org
@@ -86,22 +90,26 @@ comments instead:
 ```org
 # annotate:source notes.org
 
-# annotate:#1 3:1-3:19 comment
+# annotate:#1 3:1-3:19 comment ─────────────────────────────────
 tighten this opening
-# /annotate
+# /annotate ────────────────────────────────────────────────────
 ```
 
 * the marker holds an id, the 1-based `start_line:col-end_line:col` span
   (`col` end is inclusive) and the kind (`comment` or `delete`);
+* the dashes after the marker are the rule you see on screen — ordinary text,
+  so the file reads the same as the buffer. They are redrawn to the window
+  width and are optional when parsing, so a sidecar written without them still
+  opens;
 * `comment` blocks hold your note;
 * `delete` blocks quote the removed text with `> ` prefixes;
 * anchors follow your edits in the reviewed file — Emacs markers move them, and
-  the marker lines are rewritten as you go, so the boxes stay true;
+  the marker lines are rewritten as you go, so the rules stay true;
 * parsing accepts either comment style, so a sidecar written by an earlier run
   (or by the old Neovim plugin) still opens.
 
-`/annotate` strips the padding and the source header before handing the file to
-the model.
+`/annotate` strips the padding, the source header and the rules before handing
+the file to the model.
 
 ## Setup
 
@@ -137,7 +145,8 @@ Emacs-side settings:
 | `pi-annotate-max-width` | `90` | Maximum sidecar width, in columns. |
 | `pi-annotate-scroll-sync` | `t` | Scroll the reviewed file and the sidecar together. |
 | `pi-annotate-autosave` | `t` | Write the sidecar as you annotate. |
-| `pi-annotate-autoformat` | `t` | Wrap notes to the box width. |
+| `pi-annotate-autoformat` | `t` | Wrap notes to the sidecar width. |
+| `pi-annotate-redraw-idle` | `0.45` | Seconds of idle typing before the notes are re-laid. |
 
 The review takes the frame while it is open (reviewed file left, sidecar
 right); your window layout is restored when it ends.
@@ -154,8 +163,9 @@ Pi-side configuration: none. `PI_ANNOTATE_EMACSCLIENT` overrides the
   sidecar and sends it to the agent — or sends the abort message when the
   review was aborted, or nothing at all when there were no annotations.
 * `pi-annotate.el` — the Emacs half: sidecar parsing, the two-window layout,
-  box rendering with overlays, anchor tracking via Emacs markers, the key map,
-  and the result file (`finished` / `aborted`) that tells Pi how it ended.
+  the rules and the hidden source header (overlays), anchor tracking via Emacs
+  markers, the key map, and the result file (`finished` / `aborted`) that tells
+  Pi how it ended.
 
 `/annotate` accepts `.md` and `.org` targets; anything else is refused. An
 existing sidecar is reopened with its annotations, so an interrupted review
@@ -182,9 +192,10 @@ resumes instead of starting over.
 * **Killing a review buffer mid-review** — that counts as finishing: the
   sidecar is still read, so the annotations already made are applied; if there
   were none, the scaffold is removed and nothing is sent.
-* **A later box sits lower than its text** — a box that would overlap the one
-  above it is pushed down instead (marker, note, end marker, blank line take
-  four lines per annotation), the same trade the Neovim plugin made.
+* **A later annotation sits lower than its text** — an annotation that would
+  overlap the one above it is pushed down instead (marker, note, end marker,
+  blank line take four lines per annotation), the same trade the Neovim plugin
+  made.
 * **Nothing happens on `C-c C c`** — the command needs an active region; select
   some text first. The keys are buffer-local to the reviewed file and its
   sidecar.

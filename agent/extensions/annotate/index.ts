@@ -6,7 +6,7 @@
  * its review sidecar (`notes.comments.md` / `notes.comments.org`) on the right,
  * in the Emacs instance pi itself is running in (ghostel/vterm terminals
  * included). Regions marked there are recorded in the sidecar as blocks; the
- * Emacs package draws each one as a rounded box beside the text it belongs to.
+ * Emacs package sets each one off with a drawn rule above and below the note.
  * When the review ends, the sidecar is sent to the agent as a user message so
  * it can apply the feedback. Aborting instead tells the agent the review was
  * cancelled, so it applies nothing.
@@ -32,10 +32,19 @@ const DEFAULT_WAIT_MS = 12 * 60 * 60 * 1000; // the review may stay open for hou
 const POLL_MS = 400;
 const EMACS_TIMEOUT_MS = 20_000;
 
-/** `<!-- annotate:#1 3:1-4:69 comment -->` or `# annotate:#1 3:1-4:69 comment` */
+/**
+ * `<!-- annotate:#1 3:1-4:69 comment --> ─────` or
+ * `# annotate:#1 3:1-4:69 comment ─────────────`.
+ * The drawn rule after the marker is optional: sidecars written before the
+ * rules existed still parse.
+ */
 const MARKER =
-  /^\s*(?:<!--\s*annotate:#(\d+)\s+(\d+):(\d+)-(\d+):(\d+)\s+(\w+)\s*-->|#\s*annotate:#(\d+)\s+(\d+):(\d+)-(\d+):(\d+)\s+(\w+))\s*$/;
+  /^\s*(?:<!--\s*annotate:#(\d+)\s+(\d+):(\d+)-(\d+):(\d+)\s+(\w+)\s*-->|#\s*annotate:#(\d+)\s+(\d+):(\d+)-(\d+):(\d+)\s+(\w+))[\s\u2500-]*$/;
+/** `<!-- /annotate --> ───────` or `# /annotate ───────` */
+const END_MARKER = /^\s*(?:<!--\s*\/annotate\s*-->|#\s*\/annotate\b)/;
 const SOURCE_LINE = /^\s*(?:<!--\s*annotate:source\b|#\s*annotate:source\b)/;
+/** The rule a marker line carries: presentation, not annotation data. */
+const TRAILING_RULE = /[ \t\u2500-]+$/;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -56,7 +65,9 @@ export function commentsPathFor(file: string): string {
 export function compactComments(text: string): string {
   const out: string[] = [];
   let sawBlank = false;
-  for (const line of text.split(/\r?\n/)) {
+  for (const raw of text.split(/\r?\n/)) {
+    // the drawn rule is presentation: let the agent read the marker itself
+    const line = MARKER.test(raw) || END_MARKER.test(raw) ? raw.replace(TRAILING_RULE, "") : raw;
     if (SOURCE_LINE.test(line)) continue;
     if (line.trim() === "") {
       sawBlank = true;
