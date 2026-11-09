@@ -10,7 +10,13 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { loadConfig } from "./config.ts";
 import { buildEnvelope, buildErrorText } from "./envelope.ts";
 import { runHostDialogQuestionnaire } from "./fallback.ts";
-import { normalizeQuestions, type AskErrorCode, type QuestionnaireDetails, validateQuestions } from "./spec.ts";
+import {
+	normalizeQuestions,
+	type AskErrorCode,
+	type QuestionnaireDetails,
+	type QuestionSpec,
+	validateQuestions,
+} from "./spec.ts";
 import { createQuestionnaire } from "./ui/questionnaire.ts";
 
 export interface AskToolResult {
@@ -39,6 +45,21 @@ function ringBell(): void {
 	} catch {
 		// A closed or redirected stdout is not worth failing a question over.
 	}
+}
+
+/**
+ * What pi reports to the terminal while the dialog waits for the user.
+ *
+ * `ctx.ui.custom()` hosts loaders and other non-blocking components, so pi
+ * cannot assume a custom component needs an answer and reports nothing on its
+ * own; passing `blocked` is what makes the terminal (and anything watching
+ * OSC 7501, such as an agent dashboard) show "needs input" instead of
+ * "working" for the whole questionnaire.
+ */
+function blockedStatus(questions: QuestionSpec[]): { kind: "question"; message: string } {
+	const first = questions[0]?.question ?? "Question";
+	const message = questions.length > 1 ? `${first} (+${questions.length - 1} more)` : first;
+	return { kind: "question", message: message.length > 120 ? `${message.slice(0, 119)}…` : message };
 }
 
 export async function runAskUserQuestion(
@@ -73,8 +94,10 @@ export async function runAskUserQuestion(
 	ringBell();
 	const { collapseKey } = loadConfig();
 	try {
-		const details = await ctx.ui.custom<QuestionnaireDetails>((tui, theme, keybindings, done) =>
-			createQuestionnaire({ tui, theme, keybindings, questions, collapseKey, signal, done }),
+		const details = await ctx.ui.custom<QuestionnaireDetails>(
+			(tui, theme, keybindings, done) =>
+				createQuestionnaire({ tui, theme, keybindings, questions, collapseKey, signal, done }),
+			{ blocked: blockedStatus(questions) },
 		);
 		return success(details);
 	} catch (error) {
